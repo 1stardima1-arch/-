@@ -8,9 +8,18 @@
  * @module
  */
 
+import type * as activities from "../activities.js";
+import type * as aiCoach from "../aiCoach.js";
+import type * as athletes from "../athletes.js";
 import type * as auth from "../auth.js";
 import type * as auth_emailOtp from "../auth/emailOtp.js";
+import type * as devices from "../devices.js";
+import type * as events from "../events.js";
 import type * as http from "../http.js";
+import type * as journal from "../journal.js";
+import type * as metrics from "../metrics.js";
+import type * as nutrition from "../nutrition.js";
+import type * as performance from "../performance.js";
 import type * as users from "../users.js";
 
 import type {
@@ -20,9 +29,18 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  activities: typeof activities;
+  aiCoach: typeof aiCoach;
+  athletes: typeof athletes;
   auth: typeof auth;
   "auth/emailOtp": typeof auth_emailOtp;
+  devices: typeof devices;
+  events: typeof events;
   http: typeof http;
+  journal: typeof journal;
+  metrics: typeof metrics;
+  nutrition: typeof nutrition;
+  performance: typeof performance;
   users: typeof users;
 }>;
 

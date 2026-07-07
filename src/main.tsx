@@ -4,29 +4,41 @@ import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { InstrumentationProvider } from "@/instrumentation.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
+import { ThemeProvider } from "next-themes";
 import { StrictMode, useEffect, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router";
 import "./index.css";
 import "./types/global.d.ts";
 
-// Lazy load route components for better code splitting
+// Layout
+const AppShell = lazy(() => import("./components/layout/AppShell").then(m => ({ default: m.AppShell })));
+
+// Pages
 const Landing = lazy(() => import("./pages/Landing.tsx"));
 const AuthPage = lazy(() => import("./pages/Auth.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
+const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
+const Onboarding = lazy(() => import("./pages/Onboarding.tsx"));
+const Training = lazy(() => import("./pages/Training.tsx"));
+const Calculators = lazy(() => import("./pages/Calculators.tsx"));
+const Nutrition = lazy(() => import("./pages/Nutrition.tsx"));
+const Events = lazy(() => import("./pages/Events.tsx"));
+const Coach = lazy(() => import("./pages/Coach.tsx"));
+const Devices = lazy(() => import("./pages/Devices.tsx"));
 
-// Simple loading fallback for route transitions
 function RouteLoading() {
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-pulse text-muted-foreground">Loading...</div>
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+        <span className="text-sm text-muted-foreground animate-pulse">Загрузка...</span>
+      </div>
     </div>
   );
 }
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
-
-
 
 function RouteSyncer() {
   const location = useLocation();
@@ -51,24 +63,35 @@ function RouteSyncer() {
   return null;
 }
 
-
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <VlyToolbar />
     <InstrumentationProvider>
-      <ConvexAuthProvider client={convex}>
-        <BrowserRouter>
-          <RouteSyncer />
-          <Suspense fallback={<RouteLoading />}>
-            <Routes>
-              <Route path="/" element={<Landing />} />
-              <Route path="/auth" element={<AuthPage redirectAfterAuth="/" />} /> {/* TODO: change redirect after auth to correct page */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
-        </BrowserRouter>
-        <Toaster />
-      </ConvexAuthProvider>
+      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+        <ConvexAuthProvider client={convex}>
+          <BrowserRouter>
+            <RouteSyncer />
+            <Suspense fallback={<RouteLoading />}>
+              <Routes>
+                <Route path="/" element={<Landing />} />
+                <Route path="/auth" element={<AuthPage redirectAfterAuth="/dashboard" />} />
+                <Route path="/onboarding" element={<Onboarding />} />
+                <Route element={<AppShell />}>
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/training" element={<Training />} />
+                  <Route path="/calculators" element={<Calculators />} />
+                  <Route path="/nutrition" element={<Nutrition />} />
+                  <Route path="/events" element={<Events />} />
+                  <Route path="/coach" element={<Coach />} />
+                  <Route path="/devices" element={<Devices />} />
+                </Route>
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
+          </BrowserRouter>
+          <Toaster />
+        </ConvexAuthProvider>
+      </ThemeProvider>
     </InstrumentationProvider>
   </StrictMode>,
 );
