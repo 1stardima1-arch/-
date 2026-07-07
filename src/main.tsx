@@ -11,6 +11,9 @@ import { BrowserRouter, Route, Routes, useLocation } from "react-router";
 import "./index.css";
 import "./types/global.d.ts";
 
+// Polar OAuth callback handler
+const PolarCallback = lazy(() => import("./pages/PolarCallback.tsx"));
+
 // Layout
 const AppShell = lazy(() => import("./components/layout/AppShell").then(m => ({ default: m.AppShell })));
 
@@ -76,6 +79,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="/" element={<Landing />} />
                 <Route path="/auth" element={<AuthPage redirectAfterAuth="/dashboard" />} />
                 <Route path="/onboarding" element={<Onboarding />} />
+                <Route path="/oauth/polar/callback" element={<PolarCallback />} />
                 <Route element={<AppShell />}>
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/training" element={<Training />} />
