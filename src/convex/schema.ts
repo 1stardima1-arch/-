@@ -219,6 +219,16 @@ const schema = defineSchema(
       completed: v.boolean(),
     }).index("by_user_date", ["userId", "date"])
       .index("by_user_priority", ["userId", "priority"]),
+    // Analytics events for admin dashboard
+    analyticsEvents: defineTable({
+      userId: v.optional(v.id("users")),
+      event: v.string(),
+      properties: v.optional(v.string()),
+      path: v.optional(v.string()),
+      timestamp: v.number(),
+    }).index("by_event", ["event"])
+      .index("by_timestamp", ["timestamp"])
+      .index("by_user", ["userId"]),
   },
   {
     schemaValidation: false,

@@ -10,6 +10,7 @@
 
 import type * as activities from "../activities.js";
 import type * as aiCoach from "../aiCoach.js";
+import type * as analytics from "../analytics.js";
 import type * as athletes from "../athletes.js";
 import type * as auth from "../auth.js";
 import type * as auth_emailOtp from "../auth/emailOtp.js";
@@ -34,6 +35,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   activities: typeof activities;
   aiCoach: typeof aiCoach;
+  analytics: typeof analytics;
   athletes: typeof athletes;
   auth: typeof auth;
   "auth/emailOtp": typeof auth_emailOtp;

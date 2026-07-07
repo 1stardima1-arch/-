@@ -5,6 +5,8 @@ import { LogoDropdown } from "@/components/LogoDropdown";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import {
   LayoutDashboard,
   Dumbbell,
@@ -17,6 +19,7 @@ import {
   ChevronRight,
   Loader2,
   Sparkles,
+  BarChart3,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -58,8 +61,15 @@ const navItems = [
   },
 ];
 
+const adminNavItem = {
+  to: "/analytics",
+  label: "Аналитика",
+  icon: BarChart3,
+};
+
 export function AppShell() {
   const { isLoading, isAuthenticated, user } = useAuth();
+  const role = useQuery(api.analytics.getRole);
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -141,7 +151,7 @@ export function AppShell() {
 
         {/* Nav items */}
         <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
-          {navItems.map((item) => (
+          {[...navItems, ...(role === "admin" ? [adminNavItem] : [])].map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

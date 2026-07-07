@@ -5,6 +5,8 @@ import { InstrumentationProvider } from "@/instrumentation.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
 import { ThemeProvider } from "next-themes";
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { StrictMode, useEffect, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router";
@@ -28,6 +30,7 @@ const Nutrition = lazy(() => import("./pages/Nutrition.tsx"));
 const Events = lazy(() => import("./pages/Events.tsx"));
 const Coach = lazy(() => import("./pages/Coach.tsx"));
 const Devices = lazy(() => import("./pages/Devices.tsx"));
+const Analytics = lazy(() => import("./pages/Analytics.tsx"));
 
 function RouteLoading() {
   return (
@@ -44,12 +47,21 @@ const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
 function RouteSyncer() {
   const location = useLocation();
+  const trackEvent = useMutation(api.analytics.trackEvent);
+  const ensureAdmin = useMutation(api.analytics.ensureAdmin);
+
   useEffect(() => {
     window.parent.postMessage(
       { type: "iframe-route-change", path: location.pathname },
       "*",
     );
   }, [location.pathname]);
+
+  // Track page views and check admin status
+  useEffect(() => {
+    trackEvent({ event: "page_view", path: location.pathname });
+    ensureAdmin();
+  }, [location.pathname, trackEvent, ensureAdmin]);
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
@@ -86,8 +98,9 @@ createRoot(document.getElementById("root")!).render(
                   <Route path="/nutrition" element={<Nutrition />} />
                   <Route path="/events" element={<Events />} />
                   <Route path="/coach" element={<Coach />} />
-                  <Route path="/devices" element={<Devices />} />
-                </Route>
+                <Route path="/devices" element={<Devices />} />
+                <Route path="/analytics" element={<Analytics />} />
+              </Route>
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
