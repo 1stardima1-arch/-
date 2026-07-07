@@ -1,6 +1,7 @@
 "use node";
 
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { internalAction } from "../_generated/server";
+import { internalMutation } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { v } from "convex/values";
 
@@ -21,142 +22,8 @@ function toDateStr(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-// ─── Internal mutations (exported so they're registered) ───
+// (upsertMetric and upsertActivity moved to sync/helpers.ts)
 
-export const upsertMetric = internalMutation({
-  args: {
-    userId: v.id("users"),
-    date: v.string(),
-    hrv: v.optional(v.number()),
-    restingHR: v.optional(v.number()),
-    sleepDuration: v.optional(v.number()),
-    sleepEfficiency: v.optional(v.number()),
-    bodyBattery: v.optional(v.number()),
-    stressLevel: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("dailyMetrics")
-      .withIndex("by_user_date", (q) =>
-        q.eq("userId", args.userId).eq("date", args.date)
-      )
-      .first();
-
-    if (existing) {
-      await ctx.db.patch(existing._id, args);
-    } else {
-      await ctx.db.insert("dailyMetrics", args);
-    }
-  },
-});
-
-export const upsertActivity = internalMutation({
-  args: {
-    userId: v.id("users"),
-    date: v.string(),
-    sport: v.string(),
-    distance: v.optional(v.number()),
-    duration: v.number(),
-    pace: v.optional(v.number()),
-    avgHR: v.optional(v.number()),
-    maxHR: v.optional(v.number()),
-    tss: v.optional(v.number()),
-    calories: v.optional(v.number()),
-    elevation: v.optional(v.number()),
-    title: v.optional(v.string()),
-    planned: v.optional(v.boolean()),
-  },
-  handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("trainingActivities")
-      .withIndex("by_user_date", (q) =>
-        q.eq("userId", args.userId).eq("date", args.date)
-      )
-      .filter((q) => q.eq(q.field("title"), args.title))
-      .first();
-
-    const sportMap: Record<string, string> = {
-      running: "running",
-      cycling: "cycling",
-      swimming: "swimming",
-      cross_country_skiing: "skiing",
-      other: "other",
-    };
-    const mappedSport = (sportMap[args.sport] || "other") as
-      | "running"
-      | "cycling"
-      | "swimming"
-      | "skiing"
-      | "triathlon"
-      | "other";
-
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        distance: args.distance,
-        duration: args.duration,
-        pace: args.pace,
-        avgHR: args.avgHR,
-        maxHR: args.maxHR,
-        tss: args.tss,
-        calories: args.calories,
-        elevation: args.elevation,
-      });
-    } else {
-      await ctx.db.insert("trainingActivities", {
-        userId: args.userId,
-        date: args.date,
-        sport: mappedSport,
-        distance: args.distance,
-        duration: args.duration,
-        pace: args.pace,
-        avgHR: args.avgHR,
-        maxHR: args.maxHR,
-        tss: args.tss,
-        calories: args.calories,
-        elevation: args.elevation,
-        title: args.title,
-        planned: args.planned ?? false,
-      });
-    }
-  },
-});
-
-export const updateDeviceToken = internalMutation({
-  args: {
-    userId: v.id("users"),
-    type: v.union(v.literal("garmin"), v.literal("polar"), v.literal("healthConnect")),
-    tokenData: v.string(),
-    lastSync: v.number(),
-  },
-  handler: async (ctx, args) => {
-    const device = await ctx.db
-      .query("devices")
-      .withIndex("by_user_type", (q) =>
-        q.eq("userId", args.userId).eq("type", args.type)
-      )
-      .first();
-
-    if (device) {
-      await ctx.db.patch(device._id, {
-        tokenData: args.tokenData,
-        lastSync: args.lastSync,
-        status: "connected",
-      });
-    }
-  },
-});
-
-export const getGarminDevice = internalQuery({
-  args: { userId: v.id("users") },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("devices")
-      .withIndex("by_user_type", (q) =>
-        q.eq("userId", args.userId).eq("type", "garmin")
-      )
-      .first();
-  },
-});
 
 // ─── Main sync action ───
 
@@ -168,7 +35,7 @@ export const syncGarmin = internalAction({
     const { userId } = args;
 
     // 1. Get stored credentials
-    const device = await ctx.runQuery(internal.sync.garmin.getGarminDevice, {
+    const device = await ctx.runQuery(internal.sync.helpers.getGarminDevice, {
       userId,
     });
 
@@ -253,7 +120,7 @@ export const syncGarmin = internalAction({
           const calories = act.calories ?? undefined;
           const elevation = act.elevationGain ?? undefined;
 
-          await ctx.runMutation(internal.sync.garmin.upsertActivity, {
+          await ctx.runMutation(internal.sync.helpers.upsertActivity, {
             userId,
             date: actDate,
             sport: sportType,
@@ -305,7 +172,7 @@ export const syncGarmin = internalAction({
                   )
                 : undefined;
 
-            await ctx.runMutation(internal.sync.garmin.upsertMetric, {
+            await ctx.runMutation(internal.sync.helpers.upsertMetric, {
               userId,
               date: dateStr,
               sleepDuration: durationHours,
@@ -334,7 +201,7 @@ export const syncGarmin = internalAction({
         try {
           const hrData = await gc.getHeartRate(d);
           if (hrData?.restingHeartRate) {
-            await ctx.runMutation(internal.sync.garmin.upsertMetric, {
+            await ctx.runMutation(internal.sync.helpers.upsertMetric, {
               userId,
               date: dateStr,
               restingHR: hrData.restingHeartRate,
@@ -360,7 +227,7 @@ export const syncGarmin = internalAction({
         password: storedData.password,
         sessionToken: freshToken,
       };
-      await ctx.runMutation(internal.sync.garmin.updateDeviceToken, {
+      await ctx.runMutation(internal.sync.helpers.updateDeviceToken, {
         userId,
         type: "garmin",
         tokenData: JSON.stringify(updatedData),

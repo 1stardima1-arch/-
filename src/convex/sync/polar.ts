@@ -1,6 +1,6 @@
 "use node";
 
-import { action, internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { action, internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { v } from "convex/values";
 
@@ -42,142 +42,8 @@ function parseISODuration(duration: string): number {
   return days * 1440 + hours * 60 + minutes + seconds / 60;
 }
 
-// ─── Internal mutations ───
+// (upsertMetric and upsertActivity moved to sync/helpers.ts)
 
-export const upsertMetric = internalMutation({
-  args: {
-    userId: v.id("users"),
-    date: v.string(),
-    hrv: v.optional(v.number()),
-    restingHR: v.optional(v.number()),
-    sleepDuration: v.optional(v.number()),
-    sleepEfficiency: v.optional(v.number()),
-    bodyBattery: v.optional(v.number()),
-    stressLevel: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("dailyMetrics")
-      .withIndex("by_user_date", (q) =>
-        q.eq("userId", args.userId).eq("date", args.date)
-      )
-      .first();
-
-    if (existing) {
-      await ctx.db.patch(existing._id, args);
-    } else {
-      await ctx.db.insert("dailyMetrics", args);
-    }
-  },
-});
-
-export const upsertActivity = internalMutation({
-  args: {
-    userId: v.id("users"),
-    date: v.string(),
-    sport: v.string(),
-    distance: v.optional(v.number()),
-    duration: v.number(),
-    pace: v.optional(v.number()),
-    avgHR: v.optional(v.number()),
-    maxHR: v.optional(v.number()),
-    tss: v.optional(v.number()),
-    calories: v.optional(v.number()),
-    elevation: v.optional(v.number()),
-    title: v.optional(v.string()),
-    planned: v.optional(v.boolean()),
-  },
-  handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("trainingActivities")
-      .withIndex("by_user_date", (q) =>
-        q.eq("userId", args.userId).eq("date", args.date)
-      )
-      .filter((q) => q.eq(q.field("title"), args.title))
-      .first();
-
-    const sportMap: Record<string, string> = {
-      RUNNING: "running",
-      CYCLING: "cycling",
-      SWIMMING: "swimming",
-      CROSS_COUNTRY_SKIING: "skiing",
-      OTHER: "other",
-    };
-    const mappedSport = (sportMap[args.sport] || "other") as
-      | "running"
-      | "cycling"
-      | "swimming"
-      | "skiing"
-      | "triathlon"
-      | "other";
-
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        distance: args.distance,
-        duration: args.duration,
-        pace: args.pace,
-        avgHR: args.avgHR,
-        maxHR: args.maxHR,
-        tss: args.tss,
-        calories: args.calories,
-        elevation: args.elevation,
-      });
-    } else {
-      await ctx.db.insert("trainingActivities", {
-        userId: args.userId,
-        date: args.date,
-        sport: mappedSport,
-        distance: args.distance,
-        duration: args.duration,
-        pace: args.pace,
-        avgHR: args.avgHR,
-        maxHR: args.maxHR,
-        tss: args.tss,
-        calories: args.calories,
-        elevation: args.elevation,
-        title: args.title,
-        planned: args.planned ?? false,
-      });
-    }
-  },
-});
-
-export const updateDeviceToken = internalMutation({
-  args: {
-    userId: v.id("users"),
-    type: v.union(v.literal("garmin"), v.literal("polar"), v.literal("healthConnect")),
-    tokenData: v.string(),
-    lastSync: v.number(),
-  },
-  handler: async (ctx, args) => {
-    const device = await ctx.db
-      .query("devices")
-      .withIndex("by_user_type", (q) =>
-        q.eq("userId", args.userId).eq("type", args.type)
-      )
-      .first();
-
-    if (device) {
-      await ctx.db.patch(device._id, {
-        tokenData: args.tokenData,
-        lastSync: args.lastSync,
-        status: "connected",
-      });
-    }
-  },
-});
-
-export const getPolarDevice = internalQuery({
-  args: { userId: v.id("users") },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("devices")
-      .withIndex("by_user_type", (q) =>
-        q.eq("userId", args.userId).eq("type", "polar")
-      )
-      .first();
-  },
-});
 
 // ─── Polar API helpers ───
 
@@ -297,7 +163,7 @@ export const exchangePolarCode = action({
     };
 
     // Store tokens
-    await ctx.runMutation(internal.sync.polar.updateDeviceToken, {
+    await ctx.runMutation(internal.sync.helpers.updateDeviceToken, {
       userId: args.userId,
       type: "polar",
       tokenData: JSON.stringify(tokens),
@@ -317,7 +183,7 @@ export const syncPolar = internalAction({
     const { userId } = args;
 
     // 1. Get stored tokens
-    const device = await ctx.runQuery(internal.sync.polar.getPolarDevice, {
+    const device = await ctx.runQuery(internal.sync.helpers.getPolarDevice, {
       userId,
     });
 
@@ -343,7 +209,7 @@ export const syncPolar = internalAction({
       try {
         const fresh = await refreshPolarToken(tokens.refreshToken);
         tokens = { ...tokens, ...fresh };
-        await ctx.runMutation(internal.sync.polar.updateDeviceToken, {
+        await ctx.runMutation(internal.sync.helpers.updateDeviceToken, {
           userId,
           type: "polar",
           tokenData: JSON.stringify(tokens),
@@ -382,7 +248,7 @@ export const syncPolar = internalAction({
               ? durationMin / distanceKm
               : undefined;
 
-          await ctx.runMutation(internal.sync.polar.upsertActivity, {
+          await ctx.runMutation(internal.sync.helpers.upsertActivity, {
             userId,
             date: sessionDate,
             sport: session.sport || "OTHER",
@@ -425,7 +291,7 @@ export const syncPolar = internalAction({
             ? sleep.sleepDuration / 3600
             : undefined;
 
-          await ctx.runMutation(internal.sync.polar.upsertMetric, {
+          await ctx.runMutation(internal.sync.helpers.upsertMetric, {
             userId,
             date: sleep.date,
             sleepDuration: durationHours,
@@ -456,7 +322,7 @@ export const syncPolar = internalAction({
         let hrvDays = 0;
         for (const r of recharge) {
           if (!r.date) continue;
-          await ctx.runMutation(internal.sync.polar.upsertMetric, {
+          await ctx.runMutation(internal.sync.helpers.upsertMetric, {
             userId,
             date: r.date,
             hrv: r.hrv,
@@ -473,7 +339,7 @@ export const syncPolar = internalAction({
     }
 
     // 6. Update last sync timestamp
-    await ctx.runMutation(internal.sync.polar.updateDeviceToken, {
+    await ctx.runMutation(internal.sync.helpers.updateDeviceToken, {
       userId,
       type: "polar",
       tokenData: JSON.stringify(tokens),

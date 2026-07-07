@@ -21,6 +21,7 @@ import type * as metrics from "../metrics.js";
 import type * as nutrition from "../nutrition.js";
 import type * as performance from "../performance.js";
 import type * as sync_garmin from "../sync/garmin.js";
+import type * as sync_helpers from "../sync/helpers.js";
 import type * as sync_polar from "../sync/polar.js";
 import type * as users from "../users.js";
 
@@ -44,6 +45,7 @@ declare const fullApi: ApiFromModules<{
   nutrition: typeof nutrition;
   performance: typeof performance;
   "sync/garmin": typeof sync_garmin;
+  "sync/helpers": typeof sync_helpers;
   "sync/polar": typeof sync_polar;
   users: typeof users;
 }>;
