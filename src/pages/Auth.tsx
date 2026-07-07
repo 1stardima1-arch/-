@@ -16,7 +16,7 @@ import {
 
 import { useAuth } from "@/hooks/use-auth";
 import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
-import { Suspense, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 
 interface AuthProps {
@@ -283,9 +283,15 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
 }
 
 export default function AuthPage(props: AuthProps) {
-  return (
-    <Suspense>
-      <Auth {...props} />
-    </Suspense>
-  );
+  const { isLoading: authLoading, isAuthenticated } = useAuth();
+  
+  // Don't render auth until we know the auth state
+  if (authLoading) {
+    return null;
+  }
+  
+  // If already authenticated and we have a redirect, just redirect
+  // (handled by the internal Auth component, but we show nothing until it renders)
+  
+  return <Auth {...props} />;
 }
