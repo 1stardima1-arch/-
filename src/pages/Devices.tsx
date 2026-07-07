@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -124,6 +124,7 @@ export default function Devices() {
   const disconnect = useMutation(api.devices.disconnect);
   const syncNow = useMutation(api.devices.syncNow);
   const storeGarminCredentials = useMutation(api.devices.storeGarminCredentials);
+  const testGarminLogin = useAction(api.sync.garmin.testGarminLogin);
 
   // Garmin modal state
   const [garminModalOpen, setGarminModalOpen] = useState(false);
@@ -150,6 +151,21 @@ export default function Devices() {
     }
     setGarminConnecting(true);
     try {
+      // Step 1: Test login before saving
+      const testResult = await testGarminLogin({
+        email: garminEmail.trim(),
+        password: garminPassword,
+      });
+
+      if (!testResult.success) {
+        toast.error(testResult.message || "Ошибка подключения к Garmin");
+        if (testResult.hints) {
+          testResult.hints.forEach((hint: string) => toast.info(`💡 ${hint}`));
+        }
+        return;
+      }
+
+      // Step 2: Save credentials with the session token from test
       await storeGarminCredentials({
         email: garminEmail.trim(),
         password: garminPassword,
@@ -157,7 +173,8 @@ export default function Devices() {
       toast.success("Garmin подключён! Запускаем синхронизацию...");
       setGarminModalOpen(false);
       setGarminPassword("");
-      // Auto-sync
+      
+      // Step 3: Auto-sync
       await syncNow({ type: "garmin" });
       toast.success("Синхронизация Garmin запущена");
     } catch (e) {
@@ -167,7 +184,7 @@ export default function Devices() {
     } finally {
       setGarminConnecting(false);
     }
-  }, [garminEmail, garminPassword, storeGarminCredentials, syncNow]);
+  }, [garminEmail, garminPassword, storeGarminCredentials, syncNow, testGarminLogin]);
 
   const handlePolarConnect = useCallback(() => {
     // We need the actual POLAR_CLIENT_ID from env vars on the frontend
