@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/input-otp";
 
 import { useAuth } from "@/hooks/use-auth";
-import logo from "@/assets/logo.svg";
 import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
@@ -110,7 +109,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
               <CardHeader className="text-center">
               <div className="flex justify-center">
                     <img
-                      src={logo}
+                      src="/logo.svg"
                       alt="Lock Icon"
                       width={64}
                       height={64}

@@ -9,7 +9,6 @@ import { StrictMode, useEffect, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router";
 import "./index.css";
-import "./types/global.d.ts";
 
 // Polar OAuth callback handler
 const PolarCallback = lazy(() => import("./pages/PolarCallback.tsx"));
