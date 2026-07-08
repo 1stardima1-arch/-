@@ -6,6 +6,17 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   server: {
     androidScheme: 'https',
+    cleartext: true,
+    allowNavigation: ['*.convex.cloud'],
+  },
+  android: {
+    allowMixedContent: true,
+  },
+  plugins: {
+    SplashScreen: {
+      launchAutoHide: false,
+      backgroundColor: "#0a0a0f",
+    },
   },
 };
 
