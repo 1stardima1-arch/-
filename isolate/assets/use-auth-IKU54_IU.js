@@ -1,1 +1,0 @@
-import{h as e,e as o,c as a,i as r}from"./index-xZ3avMKE.js";function g(){const{isLoading:i,isAuthenticated:n}=e(),s=o(a.users.currentUser),{signIn:t,signOut:u}=r();return{isLoading:i||s===void 0,isAuthenticated:n,user:s,signIn:t,signOut:u}}export{g as u};
