@@ -109,6 +109,34 @@
       margin-bottom: 16px;
     }
 
+    .splash-error .retry-btn {
+      display: inline-block;
+      margin-top: 4px;
+      padding: 10px 24px;
+      background: #7c3aed;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .splash-error .retry-btn:hover {
+      background: #6d28d9;
+    }
+
+    .splash-error .retry-btn:active {
+      background: #5b21b6;
+    }
+
+    .splash-error .hint {
+      font-size: 12px;
+      color: #71717a;
+      margin-top: 16px;
+    }
+
     #root {
       min-height: 100vh;
       min-height: 100dvh;
@@ -123,8 +151,10 @@
     <div class="splash-subtitle">твой спортивный тренер</div>
     <div class="splash-loader" id="splashLoader"></div>
     <div class="splash-error" id="splashError">
-      <h3>⚠️ Не удалось загрузить приложение</h3>
-      <p id="splashErrorMessage"></p>
+      <h3>⚠️ Сервер недоступен</h3>
+      <p id="splashErrorMessage">Возможно, сервер заблокирован в вашем регионе. Попробуйте VPN или перезапустите приложение.</p>
+      <button class="retry-btn" onclick="location.reload()">Повторить попытку</button>
+      <p class="hint">Если проблема сохраняется — проверьте интернет-соединение и отключите VPN/антивирус</p>
     </div>
   </div>
 
@@ -150,13 +180,13 @@
       if (errorMsg) errorMsg.textContent = message || 'Проверьте подключение к интернету и перезапустите приложение';
     };
 
-    // Timeout — если React не загрузился за 10 секунд, показать ошибку
+    // Timeout — если React не загрузился за 30 секунд, показать ошибку
     setTimeout(() => {
       const splash = document.getElementById('splash');
       if (splash && !splash.classList.contains('fade-out')) {
-        window.showSplashError('Приложение загружается дольше обычного. Проверьте интернет-соединение.');
+        window.showSplashError('Сервер не отвечает. Возможно, он заблокирован в вашем регионе. Попробуйте использовать VPN.');
       }
-    }, 10000);
+    }, 30000);
   </script>
 
   <script type="module" src="/src/main.tsx"></script>
