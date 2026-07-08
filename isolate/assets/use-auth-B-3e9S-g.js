@@ -1,1 +1,0 @@
-import{x as o,t as e,c as a,y as r}from"./index-Cur7p5P0.js";function g(){const{isLoading:t,isAuthenticated:n}=o(),s=e(a.users.currentUser),{signIn:i,signOut:u}=r();return{isLoading:t||s===void 0,isAuthenticated:n,user:s,signIn:i,signOut:u}}export{g as u};
