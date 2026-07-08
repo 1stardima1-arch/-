@@ -1,1 +1,0 @@
-import{f as o,d as e,a,g as r}from"./index-GFJHxetB.js";function g(){const{isLoading:n,isAuthenticated:t}=o(),s=e(a.users.currentUser),{signIn:i,signOut:u}=r();return{isLoading:n||s===void 0,isAuthenticated:t,user:s,signIn:i,signOut:u}}export{g as u};
