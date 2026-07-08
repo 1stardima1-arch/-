@@ -165,10 +165,11 @@ export default function Devices() {
         return;
       }
 
-      // Step 2: Save credentials with the session token from test
+      // Step 2: Save credentials WITH the session token from test
       await storeGarminCredentials({
         email: garminEmail.trim(),
         password: garminPassword,
+        sessionToken: testResult.sessionToken,
       });
       toast.success("Garmin подключён! Запускаем синхронизацию...");
       setGarminModalOpen(false);

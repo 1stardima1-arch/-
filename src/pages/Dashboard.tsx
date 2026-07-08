@@ -6,83 +6,46 @@ import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Heart,
-  Moon,
-  Battery,
-  TrendingUp,
-  Timer,
-  Activity,
-  ArrowRight,
-  MessageCircle,
-  Zap,
-  Gauge,
+  Heart, Moon, Battery, TrendingUp, Timer, Activity,
+  ArrowRight, MessageCircle, Zap, Gauge, Footprints,
+  Flame, Watch, Dumbbell, Award
 } from "lucide-react";
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
+  LineChart, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, ReferenceLine, Area, AreaChart
 } from "recharts";
 
-const container = {
-  hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: { staggerChildren: 0.08 },
-  },
-};
-
-const item = {
-  hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0 },
-};
+const ease: readonly [number, number, number, number] = [0.25, 0.46, 0.45, 0.94];
 
 function MetricCard({
-  title,
-  value,
-  unit,
-  icon: Icon,
-  sub,
-  color = "text-primary",
-  progress,
+  title, value, unit, icon: Icon, sub, color = "text-white", progress,
+  trend,
 }: {
-  title: string;
-  value: number | string;
-  unit?: string;
-  icon: React.ElementType;
-  sub?: string;
-  color?: string;
-  progress?: number;
+  title: string; value: number | string; unit?: string;
+  icon: React.ElementType; sub?: string; color?: string;
+  progress?: number; trend?: { value: number; label: string };
 }) {
   return (
-    <Card className="glass border-0 overflow-hidden">
+    <Card className="border-0 bg-white/[0.02] backdrop-blur-sm overflow-hidden group hover:bg-white/[0.04] transition-colors duration-300">
       <CardContent className="p-4">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
-              {title}
-            </p>
-            <div className="flex items-baseline gap-1 mt-1">
-              <span className={`text-2xl font-bold ${color}`}>{value}</span>
-              {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
-            </div>
-            {sub && (
-              <p className="text-xs text-muted-foreground mt-1">{sub}</p>
-            )}
-          </div>
-          <div className={`w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center`}>
-            <Icon className={`h-4.5 w-4.5 ${color}`} />
+        <div className="flex items-start justify-between mb-2">
+          <p className="text-[11px] text-white/30 font-medium uppercase tracking-wider">{title}</p>
+          <div className="w-8 h-8 rounded-lg bg-white/[0.03] flex items-center justify-center group-hover:bg-white/[0.06] transition-colors">
+            <Icon className="h-4 w-4 text-white/30 group-hover:text-white/50 transition-colors" />
           </div>
         </div>
-        {progress !== undefined && (
-          <Progress value={progress} className="mt-3 h-1.5" />
+        <div className="flex items-baseline gap-1">
+          <span className="text-[28px] font-bold text-white/90 leading-none">{value}</span>
+          {unit && <span className="text-sm text-white/30">{unit}</span>}
+        </div>
+        {sub && <p className="text-xs text-white/25 mt-1.5">{sub}</p>}
+        {trend && (
+          <p className={`text-xs mt-1.5 ${trend.value >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+            {trend.value >= 0 ? "↑" : "↓"} {trend.label}
+          </p>
         )}
+        {progress !== undefined && <Progress value={progress} className="mt-3 h-1 bg-white/[0.04]" />}
       </CardContent>
     </Card>
   );
@@ -99,426 +62,254 @@ export default function Dashboard() {
   const recentActivities = useQuery(api.activities.list, { limit: 5 });
 
   useEffect(() => {
-    if (isOnboarded === false) {
-      navigate("/onboarding");
-    }
+    if (isOnboarded === false) navigate("/onboarding");
   }, [isOnboarded, navigate]);
 
   if (!isOnboarded) return null;
 
-  // Build HRV chart data
   const hrvData = (recentMetrics ?? [])
     .filter((m) => m.hrv)
     .map((m) => ({ date: m.date.slice(5), hrv: m.hrv }));
 
-  const avgHRV =
-    hrvData.length > 0
-      ? hrvData.reduce((s, d) => s + (d.hrv ?? 0), 0) / hrvData.length
-      : 0;
+  const avgHRV = hrvData.length > 0
+    ? hrvData.reduce((s, d) => s + (d.hrv ?? 0), 0) / hrvData.length : 0;
 
-  // Build PMC chart data
   const pmcData = (performance ?? []).map((p) => ({
     date: p.date.slice(5),
-    ctl: Math.round(p.ctl),
-    atl: Math.round(p.atl),
-    tsb: Math.round(p.tsb),
+    ctl: Math.round(p.ctl), atl: Math.round(p.atl), tsb: Math.round(p.tsb),
   }));
 
   const nearestEvent = upcomingEvents?.[0];
+  const sleepHours = todayMetrics?.sleepDuration ? todayMetrics.sleepDuration.toFixed(1) : null;
+  const sleepEff = todayMetrics?.sleepEfficiency;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease }}
+        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+      >
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Привет{profile?.gender === "male" ? "" : ""}, спортсмен!
-          </h1>
-          <p className="text-muted-foreground text-sm mt-0.5">
+          <h1 className="text-2xl font-bold tracking-tight text-white/90">
             {profile?.sports
-              ?.map(
-                (s) =>
-                  ({ running: "Бег", cycling: "Вело", swimming: "Плавание", skiing: "Лыжи", triathlon: "Триатлон", other: "Другое" }[
-                    s
-                  ])
-              )
-              .join(" · ") || "Спортсмен"}
-            {" · "}
-            {{
-              beginner: "Новичок",
-              amateur: "Любитель",
-              semipro: "Полупро",
-              pro: "Про",
-            }[profile?.level ?? "amateur"] || ""}
+              ?.map((s) => ({ running: "Бегун", cycling: "Велогонщик", swimming: "Пловец", skiing: "Лыжник", triathlon: "Триатлет", other: "Спортсмен" })[s])
+              .join(" / ") || "Спортсмен"}
+          </h1>
+          <p className="text-sm text-white/30 mt-0.5">
+            {{ beginner: "Новичок", amateur: "Любитель", semipro: "Полупрофессионал", pro: "Профессионал" }[profile?.level ?? "amateur"]}
+            {profile?.age ? ` · ${profile.age} лет` : ""}
           </p>
         </div>
-        <Button
-          className="glass-highlight"
-          onClick={() => navigate("/coach")}
-        >
-          <MessageCircle className="mr-2 h-4 w-4" />
-          AI Тренер
+        <Button onClick={() => navigate("/coach")} className="rounded-xl bg-gradient-to-r from-violet-500 to-indigo-500 border-0 shadow-lg shadow-violet-500/20 hover:shadow-violet-500/40 transition-all">
+          <MessageCircle className="mr-2 h-4 w-4" /> AI Тренер
         </Button>
-      </div>
+      </motion.div>
 
       {/* Empty state */}
-      {!todayMetrics && recentActivities?.length === 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="glass rounded-xl p-8 text-center"
-        >
-          <Watch className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-          <h3 className="text-lg font-semibold">У тебя пока нет тренировок</h3>
-          <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
-            Подключи Garmin/Polar или добавь тренировку вручную
-          </p>
-          <div className="flex items-center justify-center gap-3 mt-4">
-            <Button variant="outline" size="sm" onClick={() => navigate("/devices")}>
-              Подключить устройство
-            </Button>
-            <Button size="sm" onClick={() => navigate("/training")}>
-              Добавить тренировку
-            </Button>
+      {!todayMetrics && (recentActivities?.length ?? 0) === 0 && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-white/[0.05] bg-white/[0.01] p-10 text-center">
+          <Watch className="h-12 w-12 text-white/[0.08] mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-white/70">Нет данных для отображения</h3>
+          <p className="text-sm text-white/25 mt-1 max-w-md mx-auto">Подключи Garmin или Polar — и все метрики появятся здесь автоматически</p>
+          <div className="flex items-center justify-center gap-3 mt-6">
+            <Button variant="outline" onClick={() => navigate("/devices")} className="rounded-xl border-white/[0.08]">Подключить устройство</Button>
+            <Button onClick={() => navigate("/training")} className="rounded-xl">Добавить тренировку</Button>
           </div>
         </motion.div>
       )}
 
       {/* Metrics grid */}
-      <motion.div
-        variants={container}
-        initial="hidden"
-        animate="show"
-        className="grid grid-cols-2 md:grid-cols-4 gap-3"
-      >
-        <motion.div variants={item}>
-          <MetricCard
-            title="Recovery Score"
-            value={todayMetrics?.recoveryScore ?? "--"}
-            unit="из 100"
-            icon={Heart}
-            color={todayMetrics?.recoveryScore && todayMetrics.recoveryScore >= 70 ? "text-chart-2" : "text-chart-5"}
-            sub={todayMetrics?.recoveryScore ? (todayMetrics.recoveryScore >= 70 ? "Хорошее" : "Низкое") : "Нет данных"}
-            progress={todayMetrics?.recoveryScore ?? 0}
-          />
-        </motion.div>
-        <motion.div variants={item}>
-          <MetricCard
-            title="Пульс покоя"
-            value={todayMetrics?.restingHR ?? "--"}
-            unit="уд/мин"
-            icon={Activity}
-            color="text-chart-1"
-            sub={profile?.restingHR ? `${profile.restingHR} уд/мин норма` : undefined}
-          />
-        </motion.div>
-        <motion.div variants={item}>
-          <MetricCard
-            title="Сон"
-            value={todayMetrics?.sleepDuration ? (todayMetrics.sleepDuration / 60).toFixed(1) : "--"}
-            unit="ч"
-            icon={Moon}
-            color="text-chart-4"
-            sub={
-              todayMetrics?.sleepEfficiency
-                ? `Эфф. ${todayMetrics.sleepEfficiency}%`
-                : undefined
-            }
-          />
-        </motion.div>
-        <motion.div variants={item}>
-          <MetricCard
-            title="Body Battery"
-            value={todayMetrics?.bodyBattery ?? "--"}
-            unit="из 100"
-            icon={Battery}
-            color={todayMetrics?.bodyBattery && todayMetrics.bodyBattery >= 60 ? "text-chart-2" : "text-chart-3"}
-            progress={todayMetrics?.bodyBattery ?? 0}
-          />
-        </motion.div>
-      </motion.div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <MetricCard
+          title="Recovery"
+          value={todayMetrics?.recoveryScore ?? "--"}
+          unit={todayMetrics?.recoveryScore ? "/100" : undefined}
+          icon={Heart}
+          color={todayMetrics?.recoveryScore && todayMetrics.recoveryScore >= 70 ? "text-emerald-400" : "text-amber-400"}
+          sub={todayMetrics?.recoveryScore ? (todayMetrics.recoveryScore >= 70 ? "Готов тренироваться" : todayMetrics.recoveryScore >= 40 ? "Лёгкая нагрузка" : "Нужен отдых") : undefined}
+          progress={todayMetrics?.recoveryScore ?? 0}
+        />
+        <MetricCard
+          title="Пульс покоя"
+          value={todayMetrics?.restingHR ?? "--"}
+          unit={todayMetrics?.restingHR ? "уд/мин" : undefined}
+          icon={Activity}
+          sub={todayMetrics?.restingHR ? `${todayMetrics.restingHR < 60 ? "Отлично" : todayMetrics.restingHR < 70 ? "Норма" : "Повышен"}` : undefined}
+        />
+        <MetricCard
+          title="Сон"
+          value={sleepHours ?? "--"}
+          unit={sleepHours ? "ч" : undefined}
+          icon={Moon}
+          sub={sleepEff ? `Эффективность ${sleepEff}%` : undefined}
+          trend={sleepEff ? { value: sleepEff >= 85 ? 1 : -1, label: sleepEff >= 85 ? "Хороший сон" : "Недостаточный" } : undefined}
+        />
+        <MetricCard
+          title="HRV"
+          value={todayMetrics?.hrv ?? "--"}
+          unit={todayMetrics?.hrv ? "мс" : undefined}
+          icon={Gauge}
+          sub={todayMetrics?.hrv ? (todayMetrics.hrv >= avgHRV ? "Выше среднего" : "Ниже среднего") : undefined}
+        />
+      </div>
 
       {/* PMC Chart */}
-      {pmcData.length > 0 && (
-        <motion.div variants={item} initial="hidden" animate="show">
-          <Card className="glass border-0">
+      {pmcData.length > 3 && (
+        <Card className="border-0 bg-white/[0.02]">
+          <CardHeader className="pb-0">
+            <CardTitle className="text-sm font-medium flex items-center gap-2 text-white/60">
+              <TrendingUp className="h-4 w-4" /> PMC-график (CTL / ATL / TSB) — 90 дней
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <ResponsiveContainer width="100%" height={260}>
+              <LineChart data={pmcData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
+                <XAxis dataKey="date" stroke="rgba(255,255,255,0.15)" fontSize={10} tickLine={false} interval="preserveStartEnd" />
+                <YAxis stroke="rgba(255,255,255,0.15)" fontSize={10} tickLine={false} />
+                <Tooltip contentStyle={{ backgroundColor: "#12121a", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "12px", fontSize: "12px", color: "#fff" }} />
+                <ReferenceLine y={0} stroke="rgba(255,255,255,0.1)" />
+                <Line type="monotone" dataKey="ctl" stroke="#818cf8" strokeWidth={2} dot={false} name="CTL (фитнес)" />
+                <Line type="monotone" dataKey="atl" stroke="#34d399" strokeWidth={2} dot={false} name="ATL (усталость)" />
+                <Line type="monotone" dataKey="tsb" stroke="#fbbf24" strokeWidth={2} dot={false} name="TSB (форма)" />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* HRV + Training Status row */}
+      <div className="grid lg:grid-cols-2 gap-4">
+        {hrvData.length > 3 && (
+          <Card className="border-0 bg-white/[0.02]">
             <CardHeader className="pb-0">
-              <CardTitle className="text-base flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-primary" />
-                PMC-график (CTL/ATL/TSB) — 90 дней
+              <CardTitle className="text-sm font-medium flex items-center gap-2 text-white/60">
+                <Gauge className="h-4 w-4" /> HRV тренд — 30 дней
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-4">
-              <ResponsiveContainer width="100%" height={250}>
-                <LineChart data={pmcData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 0.06)" />
-                  <XAxis
-                    dataKey="date"
-                    stroke="oklch(0.65 0.01 260)"
-                    fontSize={11}
-                    tickLine={false}
-                    interval="preserveStartEnd"
-                  />
-                  <YAxis
-                    stroke="oklch(0.65 0.01 260)"
-                    fontSize={11}
-                    tickLine={false}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "oklch(0.18 0.012 260)",
-                      border: "1px solid oklch(1 0 0 / 0.08)",
-                      borderRadius: "8px",
-                      fontSize: "12px",
-                    }}
-                  />
-                  <ReferenceLine y={0} stroke="oklch(1 0 0 / 0.15)" />
-                  <Line
-                    type="monotone"
-                    dataKey="ctl"
-                    stroke="oklch(0.72 0.18 230)"
-                    strokeWidth={2}
-                    dot={false}
-                    name="CTL"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="atl"
-                    stroke="oklch(0.68 0.21 160)"
-                    strokeWidth={2}
-                    dot={false}
-                    name="ATL"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="tsb"
-                    stroke="oklch(0.75 0.2 80)"
-                    strokeWidth={2}
-                    dot={false}
-                    name="TSB"
-                  />
-                </LineChart>
+              <ResponsiveContainer width="100%" height={200}>
+                <AreaChart data={hrvData}>
+                  <defs>
+                    <linearGradient id="hrvGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#818cf8" stopOpacity={0.15} />
+                      <stop offset="100%" stopColor="#818cf8" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
+                  <XAxis dataKey="date" stroke="rgba(255,255,255,0.15)" fontSize={10} tickLine={false} interval="preserveStartEnd" />
+                  <YAxis stroke="rgba(255,255,255,0.15)" fontSize={10} tickLine={false} />
+                  <Tooltip contentStyle={{ backgroundColor: "#12121a", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "12px", fontSize: "12px", color: "#fff" }} />
+                  <ReferenceLine y={avgHRV} stroke="rgba(129,140,248,0.4)" strokeDasharray="6 3" />
+                  <Area type="monotone" dataKey="hrv" stroke="#818cf8" strokeWidth={2} fill="url(#hrvGradient)" dot={false} name="HRV" />
+                </AreaChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
-        </motion.div>
-      )}
-
-      {/* HRV trend + Training status */}
-      <div className="grid lg:grid-cols-2 gap-4">
-        {hrvData.length > 3 && (
-          <motion.div variants={item} initial="hidden" animate="show">
-            <Card className="glass border-0">
-              <CardHeader className="pb-0">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Gauge className="h-4 w-4 text-primary" />
-                  HRV тренд — 30 дней
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <ResponsiveContainer width="100%" height={200}>
-                  <LineChart data={hrvData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 0.06)" />
-                    <XAxis
-                      dataKey="date"
-                      stroke="oklch(0.65 0.01 260)"
-                      fontSize={10}
-                      tickLine={false}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis
-                      stroke="oklch(0.65 0.01 260)"
-                      fontSize={10}
-                      tickLine={false}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "oklch(0.18 0.012 260)",
-                        border: "1px solid oklch(1 0 0 / 0.08)",
-                        borderRadius: "8px",
-                        fontSize: "12px",
-                      }}
-                    />
-                    <ReferenceLine
-                      y={avgHRV}
-                      stroke="oklch(0.72 0.18 230 / 0.5)"
-                      strokeDasharray="6 3"
-                      label={{
-                        value: `Среднее: ${Math.round(avgHRV)}`,
-                        position: "right",
-                        fill: "oklch(0.65 0.01 260)",
-                        fontSize: 10,
-                      }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="hrv"
-                      stroke="oklch(0.72 0.18 230)"
-                      strokeWidth={2.5}
-                      dot={false}
-                      name="HRV"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </motion.div>
         )}
 
-        {/* Training Status */}
         {todayMetrics?.trainingStatus && (
-          <motion.div variants={item} initial="hidden" animate="show">
-            <Card className="glass border-0">
-              <CardHeader className="pb-0">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Zap className="h-4 w-4 text-primary" />
-                  Тренировочный статус
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <div className="glass-subtle rounded-lg p-4 text-center">
-                  <span className="text-lg font-semibold">{todayMetrics.trainingStatus}</span>
+          <Card className="border-0 bg-white/[0.02]">
+            <CardHeader className="pb-0">
+              <CardTitle className="text-sm font-medium flex items-center gap-2 text-white/60">
+                <Zap className="h-4 w-4" /> Тренировочный статус
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <div className="space-y-3">
+                <div className="p-4 rounded-xl bg-white/[0.02] text-center">
+                  <p className="text-lg font-semibold">{todayMetrics.trainingStatus}</p>
+                  {todayMetrics.bodyBattery && (
+                    <div className="mt-3">
+                      <div className="flex items-center justify-between text-xs text-white/30 mb-1">
+                        <span>Body Battery</span>
+                        <span>{todayMetrics.bodyBattery}/100</span>
+                      </div>
+                      <Progress value={todayMetrics.bodyBattery} className="h-1.5 bg-white/[0.04]" />
+                    </div>
+                  )}
                   {todayMetrics.stressLevel && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Уровень стресса: {todayMetrics.stressLevel}/100
-                    </p>
+                    <div className="mt-2">
+                      <div className="flex items-center justify-between text-xs text-white/30 mb-1">
+                        <span>Стресс</span>
+                        <span>{todayMetrics.stressLevel}/100</span>
+                      </div>
+                      <Progress value={todayMetrics.stressLevel} className="h-1.5 bg-white/[0.04]" />
+                    </div>
                   )}
                 </div>
-              </CardContent>
-            </Card>
-          </motion.div>
+              </div>
+            </CardContent>
+          </Card>
         )}
       </div>
 
       {/* Recent activities */}
-      <motion.div variants={item} initial="hidden" animate="show">
-        <Card className="glass border-0">
-          <CardHeader className="pb-0 flex flex-row items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Timer className="h-4 w-4 text-primary" />
-              Последние тренировки
-            </CardTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate("/training")}
-            >
-              Все <ArrowRight className="ml-1 h-3 w-3" />
-            </Button>
-          </CardHeader>
-          <CardContent className="pt-4">
-            {recentActivities && recentActivities.length > 0 ? (
-              <div className="space-y-2">
-                {(recentActivities ?? []).slice(0, 5).map((a) => (
-                  <div
-                    key={a._id}
-                    className="glass-subtle rounded-lg p-3 flex items-center justify-between"
-                  >
+      <Card className="border-0 bg-white/[0.02]">
+        <CardHeader className="pb-0 flex flex-row items-center justify-between">
+          <CardTitle className="text-sm font-medium flex items-center gap-2 text-white/60">
+            <Timer className="h-4 w-4" /> Последние тренировки
+          </CardTitle>
+          <Button variant="ghost" size="sm" onClick={() => navigate("/training")} className="text-white/30 hover:text-white/60">
+            Все <ArrowRight className="ml-1 h-3 w-3" />
+          </Button>
+        </CardHeader>
+        <CardContent className="pt-4">
+          {(recentActivities ?? []).length > 0 ? (
+            <div className="space-y-1.5">
+              {(recentActivities ?? []).slice(0, 5).map((a) => (
+                <div key={a._id} className="flex items-center justify-between p-3 rounded-xl hover:bg-white/[0.02] transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${a.planned ? "bg-white/[0.03]" : "bg-violet-500/10"}`}>
+                      {a.sport === "running" ? <Footprints className="h-4 w-4 text-violet-400" /> :
+                       a.sport === "cycling" ? <Dumbbell className="h-4 w-4 text-emerald-400" /> :
+                       <Timer className="h-4 w-4 text-blue-400" />}
+                    </div>
                     <div>
-                      <p className="text-sm font-medium">
-                        {a.title || ({
-                          running: "Бег",
-                          cycling: "Вело",
-                          swimming: "Плавание",
-                          skiing: "Лыжи",
-                          triathlon: "Триатлон",
-                          other: "Тренировка",
-                        }[a.sport] || "Тренировка")}
+                      <p className="text-sm font-medium text-white/80">
+                        {a.title || ({ running: "Бег", cycling: "Вело", swimming: "Плавание", skiing: "Лыжи", triathlon: "Триатлон", other: "Тренировка" }[a.sport] || "Тренировка")}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-white/25">
                         {a.date?.slice(5)}
                         {a.distance ? ` · ${a.distance.toFixed(1)} км` : ""}
                         {a.duration ? ` · ${Math.round(a.duration / 60)} мин` : ""}
                         {a.tss ? ` · TSS ${a.tss}` : ""}
                       </p>
                     </div>
-                    <Badge variant={a.planned ? "outline" : "default"} className="text-xs">
-                      {a.planned ? "План" : "Выполнено"}
-                    </Badge>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground text-center py-6">
-                Нет тренировок.{" "}
-                <button
-                  onClick={() => navigate("/training")}
-                  className="text-primary hover:underline"
-                >
-                  Добавить первую
-                </button>
-              </p>
-            )}
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${a.planned ? "bg-white/[0.03] text-white/25" : "bg-emerald-500/10 text-emerald-400"}`}>
+                    {a.planned ? "План" : "Вып."}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-white/20 text-center py-8">
+              Нет тренировок.{" "}
+              <button onClick={() => navigate("/training")} className="text-violet-400 hover:underline">Добавить первую</button>
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Nearest event */}
+      {nearestEvent && (
+        <Card className="border-0 bg-gradient-to-r from-violet-500/5 to-indigo-500/5 border-l-2 border-l-violet-400">
+          <CardContent className="p-5 flex items-center justify-between">
+            <div>
+              <p className="text-[11px] text-white/30 uppercase tracking-wider">Ближайший старт</p>
+              <p className="font-semibold text-white/80 mt-0.5">{nearestEvent.name}</p>
+              <p className="text-sm text-white/30">{nearestEvent.date} · {nearestEvent.discipline}</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => navigate("/events")} className="rounded-xl border-white/[0.08]">
+              Все события
+            </Button>
           </CardContent>
         </Card>
-      </motion.div>
-
-      {/* Nearest event countdown */}
-      {nearestEvent && (
-        <motion.div variants={item} initial="hidden" animate="show">
-          <Card className="glass border-0 border-l-2 border-l-primary">
-            <CardContent className="p-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wider">
-                  Ближайший старт
-                </p>
-                <p className="font-semibold">{nearestEvent.name}</p>
-                <p className="text-sm text-muted-foreground">
-                  {nearestEvent.date} · {nearestEvent.discipline}
-                  {nearestEvent.targetTime ? ` · Цель: ${nearestEvent.targetTime}` : ""}
-                </p>
-              </div>
-              <Button variant="outline" size="sm" onClick={() => navigate("/events")}>
-                Все события
-              </Button>
-            </CardContent>
-          </Card>
-        </motion.div>
       )}
     </div>
-  );
-}
-
-function Watch({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <circle cx="12" cy="12" r="7" />
-      <polyline points="12 9 12 12 13.5 13.5" />
-      <path d="M13 3V1" />
-      <path d="M13 23v-2" />
-      <path d="M18 3.6l1 2" />
-      <path d="M16.2 21.4l.8 1.6" />
-    </svg>
-  );
-}
-
-function Badge({
-  children,
-  variant = "default",
-  className,
-}: {
-  children: React.ReactNode;
-  variant?: "default" | "outline";
-  className?: string;
-}) {
-  return (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-        variant === "default"
-          ? "bg-primary/15 text-primary"
-          : "border border-border text-muted-foreground"
-      } ${className}`}
-    >
-      {children}
-    </span>
   );
 }

@@ -15,11 +15,12 @@ export const list = query({
   },
 });
 
-// Store Garmin Connect credentials (email + password)
+// Store Garmin Connect credentials (email + password + session token)
 export const storeGarminCredentials = mutation({
   args: {
     email: v.string(),
     password: v.string(),
+    sessionToken: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -28,6 +29,7 @@ export const storeGarminCredentials = mutation({
     const storedData = JSON.stringify({
       email: args.email,
       password: args.password,
+      sessionToken: args.sessionToken || undefined,
     });
 
     const existing = await ctx.db
