@@ -7,7 +7,7 @@ import { ConvexReactClient } from "convex/react";
 import { ThemeProvider } from "next-themes";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { StrictMode, useEffect, lazy, Suspense, useState } from "react";
+import { StrictMode, useEffect, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router";
 import "./index.css";
@@ -47,14 +47,13 @@ function RouteLoading() {
   );
 }
 
-// Convex URL — проверяем перед инициализацией
-const CONVEX_URL = import.meta.env.VITE_CONVEX_URL as string;
-const isConvexConfigured = CONVEX_URL && CONVEX_URL.length > 0 && CONVEX_URL.startsWith('https://');
+// Convex URL — сначала пытаемся из env, иначе fallback
+const CONVEX_URL =
+  (import.meta.env.VITE_CONVEX_URL as string) ||
+  'https://valiant-hippopotamus-723.convex.cloud';
 
-// Если URL нет — создаём fallback клиент, который не падает
-const convex = isConvexConfigured
-  ? new ConvexReactClient(CONVEX_URL)
-  : null;
+const convex = new ConvexReactClient(CONVEX_URL);
+const isConvexConfigured = true;
 
 function RouteSyncer() {
   const location = useLocation();
@@ -89,41 +88,6 @@ function RouteSyncer() {
 }
 
 function App() {
-  const [error, setError] = useState<string | null>(null);
-
-  // If no Convex URL configured
-  if (!isConvexConfigured) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f] p-6">
-        <div className="max-w-sm text-center">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-3xl mx-auto mb-6 shadow-lg shadow-purple-500/30">
-            🏃
-          </div>
-          <h1 className="text-2xl font-bold text-white mb-3">Добро пожаловать в AI Coach!</h1>
-          <p className="text-zinc-400 text-sm mb-6 leading-relaxed">
-            Для работы приложения нужно подключение к серверу. 
-            Проверьте интернет-соединение и перезапустите приложение.
-          </p>
-          {error && (
-            <p className="text-red-400 text-xs mb-4 p-3 bg-red-950/50 rounded-lg">
-              {error}
-            </p>
-          )}
-          <button
-            onClick={() => window.location.reload()}
-            className="px-6 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-sm font-medium transition-colors"
-          >
-            Перезапустить
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!convex) {
-    return null; // Never happens because of the check above, but keeps TS happy
-  }
-
   return (
     <StrictMode>
       <InstrumentationProvider>
