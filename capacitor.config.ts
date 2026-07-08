@@ -5,7 +5,6 @@ const config: CapacitorConfig = {
   appName: 'AI Coach',
   webDir: 'dist',
   server: {
-    androidScheme: 'https',
     cleartext: true,
     allowNavigation: ['*.convex.cloud'],
   },
