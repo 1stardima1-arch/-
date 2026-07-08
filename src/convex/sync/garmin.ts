@@ -4,320 +4,185 @@ import { action, internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { v } from "convex/values";
 
-// ─── Types ───
-
-interface StoredGarminData {
-  email: string;
-  password: string;
-  sessionToken?: string;
-}
-
 function toDateStr(d: Date): string {
   return d.toISOString().slice(0, 10);
-}
-
-/**
- * Creates an authenticated GarminConnect client from stored credentials.
- * Tries to restore a saved session first, then falls back to login.
- */
-async function createGarminClient(storedData: StoredGarminData) {
-  const { GarminConnect } =
-    await import("garmin-connect");
-  const gc = new GarminConnect({
-    username: storedData.email,
-    password: storedData.password,
-  });
-
-  // Try to restore saved session
-  if (storedData.sessionToken) {
-    try {
-      const parsed = JSON.parse(storedData.sessionToken);
-      gc.loadToken(parsed.oauth1, parsed.oauth2);
-      return gc;
-    } catch {
-      // Session expired — will login below
-    }
-  }
-
-  // Login with credentials
-  const result = await gc.login(storedData.email, storedData.password);
-  return result || gc;
 }
 
 // ─── Main sync action ───
 
 export const syncGarmin = internalAction({
-  args: {
-    userId: v.id("users"),
-  },
+  args: { userId: v.id("users") },
   handler: async (ctx, args) => {
     const { userId } = args;
     const now = Date.now();
-    const results: string[] = [];
+    const logs: string[] = [];
 
     // 1. Get stored credentials
-    const device = await ctx.runQuery(
-      internal.sync.helpers.getGarminDevice,
-      { userId }
-    );
-
+    const device = await ctx.runQuery(internal.sync.helpers.getGarminDevice, { userId });
     if (!device?.tokenData) {
-      return {
-        success: false,
-        error: "Garmin credentials not configured.",
-        details: [],
-        syncedAt: now,
-      };
+      return { success: false, error: "Garmin не настроен. Добавь устройство на странице Устройства.", syncedAt: now, details: [] };
     }
 
-    let storedData: StoredGarminData;
-    try {
-      storedData = JSON.parse(device.tokenData);
-    } catch {
-      return {
-        success: false,
-        error:
-          "Invalid stored credentials. Please reconnect Garmin.",
-        details: [],
-        syncedAt: now,
-      };
+    let stored: { email: string; password: string; sessionToken?: string };
+    try { stored = JSON.parse(device.tokenData); } catch {
+      return { success: false, error: "Повреждённые данные Garmin. Переподключи устройство.", syncedAt: now, details: [] };
+    }
+    if (!stored.email || !stored.password) {
+      return { success: false, error: "Нет креденшелов Garmin. Переподключи устройство.", syncedAt: now, details: [] };
     }
 
-    if (!storedData.email || !storedData.password) {
-      return {
-        success: false,
-        error:
-          "Missing Garmin credentials. Please re-enter.",
-        details: [],
-        syncedAt: now,
-      };
-    }
-
-    // 2. Authenticate
+    // 2. Create client with session restore or fresh login
+    const { GarminConnect } = await import("garmin-connect");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let gc: any;
+    const gc = new (GarminConnect as any)({ username: stored.email, password: stored.password });
+
     try {
-      gc = await createGarminClient(storedData);
-    } catch (loginErr) {
-      const msg =
-        loginErr instanceof Error
-          ? loginErr.message
-          : String(loginErr);
+      if (stored.sessionToken) {
+        try {
+          const parsed = JSON.parse(stored.sessionToken);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (gc as any).loadToken(parsed.oauth1, parsed.oauth2);
+          logs.push("📡 Сессия Garmin восстановлена");
+        } catch {
+          logs.push("📡 Сессия истекла — логинимся заново");
+          await gc.login(stored.email, stored.password);
+        }
+      } else {
+        logs.push("📡 Первый вход в Garmin Connect");
+        await gc.login(stored.email, stored.password);
+      }
+    } catch (loginErr: unknown) {
+      const msg = loginErr instanceof Error ? loginErr.message : String(loginErr);
       return {
         success: false,
-        error: `Garmin login failed: ${msg}. Попробуй:
-1. Проверь email/пароль — войди в Garmin Connect через браузер
-2. Если у тебя включена двухфакторная аутентификация (2FA), отключи её временно
-3. Попробуй позже — Garmin иногда блокирует неофициальные подключения`,
-        details: [`Login error: ${msg}`],
+        error: `❌ Garmin login: ${msg.slice(0, 200)}`,
         syncedAt: now,
+        details: logs,
       };
     }
 
     // 3. Fetch activities (last 30 days)
     try {
-      const activities = await gc.getActivities(0, 100);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const activities = await (gc as any).getActivities(0, 100);
       if (activities?.length) {
         let count = 0;
-        const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
-
+        const cutoff = Date.now() - 30 * 86400000;
         for (const act of activities) {
-          const actDate = (
-            act.startTimeLocal as string
-          )?.slice(0, 10);
-          if (!actDate) continue;
+          const actDate = (act.startTimeLocal as string)?.slice(0, 10);
+          if (!actDate || new Date(actDate).getTime() < cutoff) continue;
 
-          const age = Date.now() - new Date(actDate).getTime();
-          if (age > thirtyDaysMs) continue;
-
-          const sport =
-            (
-              act.activityType as Record<string, string>
-            )?.typeKey || "other";
-          const dist = (act.distance as number)
-            ? (act.distance as number) / 1000
-            : undefined;
-          const dur = (act.duration as number)
-            ? (act.duration as number) / 60
-            : 0;
+          const sport = (act.activityType as Record<string, string>)?.typeKey || "other";
+          const dist = (act.distance as number) ? (act.distance as number) / 1000 : undefined;
+          const dur = (act.duration as number) ? (act.duration as number) / 60 : 0;
           const pace = dist && dur > 0 ? dur / dist : undefined;
 
-          await ctx.runMutation(
-            internal.sync.helpers.upsertActivity,
-            {
-              userId,
-              date: actDate,
-              sport,
-              distance: dist,
-              duration: dur,
-              pace,
-              avgHR: act.averageHR as number | undefined,
-              maxHR: act.maxHR as number | undefined,
-              tss: undefined,
-              calories: act.calories as number | undefined,
-              elevation:
-                act.elevationGain as number | undefined,
-              title:
-                act.activityName as string | undefined,
-              planned: false,
-            }
-          );
+          await ctx.runMutation(internal.sync.helpers.upsertActivity, {
+            userId, date: actDate, sport,
+            distance: dist, duration: dur, pace,
+            avgHR: act.averageHR as number | undefined,
+            maxHR: act.maxHR as number | undefined,
+            calories: act.calories as number | undefined,
+            elevation: act.elevationGain as number | undefined,
+            title: (act.activityName as string) || `${sport} — ${actDate}`,
+            planned: false,
+          });
           count++;
         }
-        results.push(`📊 Импортировано тренировок: ${count}`);
+        logs.push(`🏃 Тренировок: ${count}`);
+      } else {
+        logs.push("🏃 Тренировок за 30 дней не найдено");
       }
-    } catch (e) {
-      results.push(
-        `⚠️ Ошибка тренировок: ${
-          e instanceof Error ? e.message : "неизвестно"
-        }`
-      );
+    } catch (e: unknown) {
+      logs.push(`⚠️ Тренировки: ${e instanceof Error ? e.message.slice(0, 80) : "ошибка"}`);
     }
 
     // 4. Fetch sleep
     try {
-      const sleepData = (await gc.getSleepData(
-        new Date()
-      )) as Record<string, unknown>;
-      const daily = sleepData?.dailySleepDTO as
-        | Record<string, unknown>
-        | undefined;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sleepData = await (gc as any).getSleepData(new Date());
+      const daily = sleepData?.dailySleepDTO as Record<string, unknown> | undefined;
       if (daily?.sleepTimeSeconds) {
         const deep = (daily.deepSleepSeconds as number) || 0;
-        const light =
-          (daily.lightSleepSeconds as number) || 0;
+        const light = (daily.lightSleepSeconds as number) || 0;
         const rem = (daily.remSleepSeconds as number) || 0;
-        const awake =
-          (daily.awakeSleepSeconds as number) || 0;
+        const awake = (daily.awakeSleepSeconds as number) || 0;
         const totalSleep = deep + light + rem;
         const totalInBed = totalSleep + awake;
 
-        await ctx.runMutation(
-          internal.sync.helpers.upsertMetric,
-          {
-            userId,
-            date: toDateStr(new Date()),
-            sleepDuration:
-              (daily.sleepTimeSeconds as number) / 3600,
-            sleepEfficiency:
-              totalInBed > 0
-                ? Math.round(
-                    (totalSleep / totalInBed) * 100
-                  )
-                : undefined,
-            hrv: (sleepData.avgOvernightHrv as
-              | number
-              | undefined),
-          }
-        );
-        results.push(`😴 Сон: импортирован`);
+        await ctx.runMutation(internal.sync.helpers.upsertMetric, {
+          userId,
+          date: toDateStr(new Date()),
+          sleepDuration: (daily.sleepTimeSeconds as number) / 3600,
+          sleepEfficiency: totalInBed > 0 ? Math.round((totalSleep / totalInBed) * 100) : undefined,
+          hrv: sleepData.avgOvernightHrv as number | undefined,
+        });
+        logs.push(`😴 Сон: ${Math.round((daily.sleepTimeSeconds as number) / 3600)}ч (эфф. ${totalInBed > 0 ? Math.round((totalSleep / totalInBed) * 100) : "?"}%)`);
       }
-    } catch (e) {
-      results.push(
-        `⚠️ Сон: ${
-          e instanceof Error ? e.message : "нет данных"
-        }`
-      );
+    } catch (e: unknown) {
+      logs.push(`⚠️ Сон: ${e instanceof Error ? e.message.slice(0, 80) : "нет данных"}`);
     }
 
-    // 5. Fetch HR (resting heart rate)
+    // 5. Resting HR
     try {
-      const hrData = (await gc.getHeartRate(
-        new Date()
-      )) as Record<string, unknown>;
-      if (hrData?.restingHeartRate) {
-        await ctx.runMutation(
-          internal.sync.helpers.upsertMetric,
-          {
-            userId,
-            date: toDateStr(new Date()),
-            restingHR: hrData.restingHeartRate as number,
-          }
-        );
-        results.push(
-          `❤️ Пульс покоя: ${hrData.restingHeartRate} уд/мин`
-        );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const hr = await (gc as any).getHeartRate(new Date());
+      if (hr?.restingHeartRate) {
+        await ctx.runMutation(internal.sync.helpers.upsertMetric, {
+          userId, date: toDateStr(new Date()),
+          restingHR: hr.restingHeartRate as number,
+        });
+        logs.push(`❤️ Пульс покоя: ${hr.restingHeartRate}`);
       }
-    } catch (e) {
-      results.push(
-        `⚠️ Пульс: ${
-          e instanceof Error ? e.message : "нет данных"
-        }`
-      );
+    } catch (e: unknown) {
+      logs.push(`⚠️ Пульс: ${e instanceof Error ? e.message.slice(0, 80) : "нет данных"}`);
     }
 
     // 6. Save updated session
-    try {
-      const fresh = gc.exportToken();
-      const updated: StoredGarminData = {
-        email: storedData.email,
-        password: storedData.password,
-        sessionToken: JSON.stringify(fresh),
-      };
-      await ctx.runMutation(
-        internal.sync.helpers.updateDeviceToken,
-        {
-          userId,
-          type: "garmin",
-          tokenData: JSON.stringify(updated),
-          lastSync: now,
-        }
-      );
-    } catch {
-      // Session token save failed — not critical
-    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fresh = (gc as any).exportToken();
+    const updated = JSON.stringify({
+      email: stored.email,
+      password: stored.password,
+      sessionToken: JSON.stringify(fresh),
+    });
+    await ctx.runMutation(internal.sync.helpers.updateDeviceToken, {
+      userId, type: "garmin", tokenData: updated, lastSync: now,
+    });
 
-    return {
-      success: true,
-      syncedAt: now,
-      details: results,
-      error: undefined,
-    };
+    return { success: true, syncedAt: now, details: logs };
   },
 });
 
-/**
- * Test Garmin connection — called from frontend to validate credentials before storing.
- */
+// ─── Test connection action ───
+
 export const testGarminLogin = action({
-  args: {
-    email: v.string(),
-    password: v.string(),
-  },
+  args: { email: v.string(), password: v.string() },
   handler: async (_ctx, args) => {
     try {
-      const { GarminConnect } =
-        await import("garmin-connect");
-      const gc = new GarminConnect({
-        username: args.email,
-        password: args.password,
-      });
-      const loginResult = await gc.login(
-        args.email,
-        args.password
-      );
-      const sessionToken = JSON.stringify(
-        gc.exportToken()
-      );
+      const { GarminConnect } = await import("garmin-connect");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const gc = new (GarminConnect as any)({ username: args.email, password: args.password });
+      await gc.login(args.email, args.password);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const token = (gc as any).exportToken();
       return {
         success: true,
-        message:
-          "✅ Подключение к Garmin Connect успешно!",
-        sessionToken,
+        message: "✅ Garmin Connect — успешно",
+        sessionToken: JSON.stringify(token),
         hints: [],
       };
-    } catch (e) {
-      const msg =
-        e instanceof Error ? e.message : String(e);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
       return {
         success: false,
-        message: `❌ Ошибка Garmin: ${msg}`,
+        message: `❌ Garmin: ${msg.slice(0, 200)}`,
         sessionToken: undefined,
         hints: [
-          "1. Проверь email и пароль — войди в Garmin Connect через браузер",
-          "2. Отключи двухфакторную аутентификацию (2FA) временно",
-          "3. Garmin может блокировать неофициальные подключения — попробуй позже",
-          "4. Если всё равно не работает — используй Polar (официальный OAuth2 API)",
+          "Проверь email/пароль на connect.garmin.com",
+          "Отключи двухфакторку (2FA) временно",
+          "Garmin может блокировать неофициальные подключения — попробуй позже",
+          "Альтернатива: используй Polar (официальный OAuth2)",
         ],
       };
     }
