@@ -1,0 +1,1 @@
+import{J as e,e as o,c as a,K as r}from"./index-Dr72fTlz.js";function g(){const{isLoading:n,isAuthenticated:t}=e(),s=o(a.users.currentUser),{signIn:i,signOut:u}=r();return{isLoading:n||s===void 0,isAuthenticated:t,user:s,signIn:i,signOut:u}}export{g as u};
