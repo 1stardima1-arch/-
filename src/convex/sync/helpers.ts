@@ -27,12 +27,32 @@ export const getPolarDevice = internalQuery({
   },
 });
 
+export const getAthyxDevice = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("devices")
+      .withIndex("by_user_type", (q) =>
+        q.eq("userId", args.userId).eq("type", "athyx")
+      )
+      .first();
+  },
+});
+
+export const getAllConnectedAthyxDevices = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const devices = await ctx.db.query("devices").collect();
+    return devices.filter((d) => d.type === "athyx" && d.status === "connected");
+  },
+});
+
 // ─── Mutations ───
 
 export const updateDeviceToken = internalMutation({
   args: {
     userId: v.id("users"),
-    type: v.union(v.literal("garmin"), v.literal("polar"), v.literal("healthConnect")),
+    type: v.union(v.literal("garmin"), v.literal("polar"), v.literal("healthConnect"), v.literal("athyx")),
     tokenData: v.string(),
     lastSync: v.number(),
   },
@@ -50,6 +70,39 @@ export const updateDeviceToken = internalMutation({
         lastSync: args.lastSync,
         status: "connected",
       });
+    }
+  },
+});
+
+export const insertLactateReading = internalMutation({
+  args: {
+    userId: v.id("users"),
+    timestamp: v.number(),
+    lactateMM: v.number(),
+    peakLactateMM: v.optional(v.number()),
+    avgHR: v.optional(v.number()),
+    athyxSessionId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.insert("lactateReadings", args);
+  },
+});
+
+export const markDeviceStatus = internalMutation({
+  args: {
+    userId: v.id("users"),
+    type: v.union(v.literal("garmin"), v.literal("polar"), v.literal("healthConnect"), v.literal("athyx")),
+    status: v.union(v.literal("connected"), v.literal("disconnected"), v.literal("unavailable")),
+  },
+  handler: async (ctx, args) => {
+    const device = await ctx.db
+      .query("devices")
+      .withIndex("by_user_type", (q) =>
+        q.eq("userId", args.userId).eq("type", args.type)
+      )
+      .first();
+    if (device) {
+      await ctx.db.patch(device._id, { status: args.status });
     }
   },
 });

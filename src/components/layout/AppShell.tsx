@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useGarminLactateBridge } from "@/hooks/use-garmin-lactate-bridge";
 import {
   LayoutDashboard, Dumbbell, Calculator, Apple, CalendarDays,
   MessageCircle, Watch, Sparkles, BarChart3, ChevronLeft,
@@ -29,6 +30,7 @@ export function AppShell() {
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  useGarminLactateBridge();
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) navigate("/auth");

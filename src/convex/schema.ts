@@ -149,12 +149,22 @@ const schema = defineSchema(
     // Connected devices
     devices: defineTable({
       userId: v.id("users"),
-      type: v.union(v.literal("garmin"), v.literal("polar"), v.literal("healthConnect")),
+      type: v.union(v.literal("garmin"), v.literal("polar"), v.literal("healthConnect"), v.literal("athyx")),
       status: v.union(v.literal("connected"), v.literal("disconnected"), v.literal("unavailable")),
       connectedAt: v.optional(v.number()),
       lastSync: v.optional(v.number()),
       tokenData: v.optional(v.string()),
     }).index("by_user_type", ["userId", "type"]),
+
+    // Lactate readings (Athyx FLUX I), polled from the Athyx API and relayed to the Garmin watch app
+    lactateReadings: defineTable({
+      userId: v.id("users"),
+      timestamp: v.number(),
+      lactateMM: v.number(),
+      peakLactateMM: v.optional(v.number()),
+      avgHR: v.optional(v.number()),
+      athyxSessionId: v.optional(v.string()),
+    }).index("by_user_timestamp", ["userId", "timestamp"]),
 
     // Wellness journal
     journalEntries: defineTable({

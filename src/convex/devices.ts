@@ -93,6 +93,66 @@ export const storePolarTokens = mutation({
   },
 });
 
+// Store Athyx API key (read-only key from athyx.com/developers)
+export const storeAthyxApiKey = mutation({
+  args: {
+    apiKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const existing = await ctx.db
+      .query("devices")
+      .withIndex("by_user_type", (q) =>
+        q.eq("userId", userId).eq("type", "athyx")
+      )
+      .first();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        status: "connected",
+        connectedAt: Date.now(),
+        tokenData: args.apiKey,
+      });
+      return existing._id;
+    }
+
+    return await ctx.db.insert("devices", {
+      userId,
+      type: "athyx",
+      status: "connected",
+      connectedAt: Date.now(),
+      tokenData: args.apiKey,
+    });
+  },
+});
+
+// Latest lactate reading for the current user — polled by the frontend and
+// relayed to the paired Garmin watch app over the Connect IQ bridge.
+export const getLatestLactate = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return null;
+
+    const reading = await ctx.db
+      .query("lactateReadings")
+      .withIndex("by_user_timestamp", (q) => q.eq("userId", userId))
+      .order("desc")
+      .first();
+
+    if (!reading) return null;
+    return {
+      lactateMM: reading.lactateMM,
+      peakLactateMM: reading.peakLactateMM,
+      avgHR: reading.avgHR,
+      timestamp: reading.timestamp,
+      ageSeconds: Math.round((Date.now() - reading.timestamp) / 1000),
+    };
+  },
+});
+
 // Connect a device (Garmin: store credentials, Polar: mark as pending OAuth, HealthConnect: mark connected)
 export const connect = mutation({
   args: {
@@ -139,7 +199,8 @@ export const disconnect = mutation({
     type: v.union(
       v.literal("garmin"),
       v.literal("polar"),
-      v.literal("healthConnect")
+      v.literal("healthConnect"),
+      v.literal("athyx")
     ),
   },
   handler: async (ctx, args) => {
@@ -168,7 +229,8 @@ export const syncNow = mutation({
     type: v.union(
       v.literal("garmin"),
       v.literal("polar"),
-      v.literal("healthConnect")
+      v.literal("healthConnect"),
+      v.literal("athyx")
     ),
   },
   handler: async (ctx, args) => {
@@ -181,6 +243,10 @@ export const syncNow = mutation({
       });
     } else if (args.type === "polar") {
       await ctx.scheduler.runAfter(0, internal.sync.polar.syncPolar, {
+        userId,
+      });
+    } else if (args.type === "athyx") {
+      await ctx.scheduler.runAfter(0, internal.sync.athyx.syncAthyx, {
         userId,
       });
     }

@@ -17,6 +17,18 @@ All relevant files live in the 'src' directory.
 
 Use bun for the package manager.
 
+## Garmin ⟷ Athyx FLUX I lactate integration
+
+Relays lactate readings from an Athyx FLUX I sensor to a Garmin watch, since
+Connect IQ has no NFC API (Garmin watch NFC is locked to Garmin Pay). Data
+flow: FLUX I → Athyx phone app → Athyx REST API (polled every 30s by a
+Convex cron, `src/convex/sync/athyx.ts` / `src/convex/crons.ts`) → Android
+app (`src/hooks/use-garmin-lactate-bridge.ts`) → native `GarminBridge`
+Capacitor plugin (`android/app/src/main/java/com/aicoach/app/GarminBridgePlugin.java`,
+wraps the Connect IQ Mobile SDK) → the watch app in `garmin-watch-app/`.
+Connect devices on the `/devices` page. See `garmin-watch-app/README.md` and
+`android/app/libs/README.md` for the manual SDK setup both sides need.
+
 ## Setup
 
 This project is set up already and running on a cloud environment, as well as a convex development in the sandbox.

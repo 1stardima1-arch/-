@@ -27,11 +27,17 @@ import {
   Loader2,
   Eye,
   EyeOff,
+  Droplet,
+  Key,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router";
+import { GarminBridge } from "@/lib/garmin-bridge";
+import { lactateZone } from "@/hooks/use-garmin-lactate-bridge";
 
 // ─── Device metadata ───
+
+type DeviceType = "garmin" | "polar" | "healthConnect" | "athyx";
 
 interface DeviceMeta {
   name: string;
@@ -45,7 +51,7 @@ interface DeviceMeta {
   note?: string;
 }
 
-const deviceInfo: Record<"garmin" | "polar" | "healthConnect", DeviceMeta> = {
+const deviceInfo: Record<DeviceType, DeviceMeta> = {
   garmin: {
     name: "Garmin",
     description: "Garmin Connect — через твой аккаунт",
@@ -72,6 +78,16 @@ const deviceInfo: Record<"garmin" | "polar" | "healthConnect", DeviceMeta> = {
     bgColor: "bg-chart-2/10",
     available: true,
     note: "Требуется Android-приложение для синхронизации",
+  },
+  athyx: {
+    name: "Athyx FLUX I",
+    description: "Лактат в реальном времени → часы Garmin",
+    icon: Droplet,
+    color: "text-rose-400",
+    bgColor: "bg-rose-400/10",
+    available: true,
+    setupUrl: "https://www.athyx.com/developers",
+    note: "API-ключ (ath_live_...) с athyx.com/developers. Опрос раз в 30 сек, значение уходит на часы через приложение Garmin Connect IQ.",
   },
 };
 
@@ -115,16 +131,26 @@ const statusLabel = (status?: string) => {
   }
 };
 
+const zoneBadgeClass: Record<number, string> = {
+  1: "border-chart-2/30 text-chart-2",
+  2: "border-chart-3/30 text-chart-3",
+  3: "border-chart-5/30 text-chart-5",
+  4: "border-rose-500/30 text-rose-400",
+};
+
 // ─── Component ───
 
 export default function Devices() {
   const navigate = useNavigate();
   const devices = useQuery(api.devices.list);
+  const latestLactate = useQuery(api.devices.getLatestLactate);
   const connect = useMutation(api.devices.connect);
   const disconnect = useMutation(api.devices.disconnect);
   const syncNow = useMutation(api.devices.syncNow);
   const storeGarminCredentials = useMutation(api.devices.storeGarminCredentials);
+  const storeAthyxApiKey = useMutation(api.devices.storeAthyxApiKey);
   const testGarminLogin = useAction(api.sync.garmin.testGarminLogin);
+  const testAthyxKey = useAction(api.sync.athyx.testAthyxKey);
 
   // Garmin modal state
   const [garminModalOpen, setGarminModalOpen] = useState(false);
@@ -133,6 +159,12 @@ export default function Devices() {
   const [showPassword, setShowPassword] = useState(false);
   const [garminConnecting, setGarminConnecting] = useState(false);
 
+  // Athyx modal state
+  const [athyxModalOpen, setAthyxModalOpen] = useState(false);
+  const [athyxApiKey, setAthyxApiKey] = useState("");
+  const [athyxConnecting, setAthyxConnecting] = useState(false);
+  const [watchChecking, setWatchChecking] = useState(false);
+
   // Sync states
   const [syncing, setSyncing] = useState<Record<string, boolean>>({});
 
@@ -140,7 +172,7 @@ export default function Devices() {
   const POLAR_CLIENT_ID = "00000000-0000-0000-0000-000000000000"; // Placeholder — will be set via env
   const polarRedirectUri = `${window.location.origin}/oauth/polar/callback`;
 
-  const getDeviceStatus = (type: "garmin" | "polar" | "healthConnect") => {
+  const getDeviceStatus = (type: DeviceType) => {
     return devices?.find((d) => d.type === type);
   };
 
@@ -187,6 +219,48 @@ export default function Devices() {
     }
   }, [garminEmail, garminPassword, storeGarminCredentials, syncNow, testGarminLogin]);
 
+  const handleAthyxConnect = useCallback(async () => {
+    if (!athyxApiKey.trim()) {
+      toast.error("Введи API-ключ Athyx (ath_live_...)");
+      return;
+    }
+    setAthyxConnecting(true);
+    try {
+      const testResult = await testAthyxKey({ apiKey: athyxApiKey.trim() });
+      if (!testResult.success) {
+        toast.error(testResult.message || "Ошибка подключения к Athyx");
+        testResult.hints?.forEach((hint: string) => toast.info(`💡 ${hint}`));
+        return;
+      }
+
+      await storeAthyxApiKey({ apiKey: athyxApiKey.trim() });
+      toast.success("Athyx подключён! Запускаем синхронизацию...");
+      setAthyxModalOpen(false);
+      setAthyxApiKey("");
+
+      await syncNow({ type: "athyx" });
+      toast.success("Синхронизация Athyx запущена — данные обновляются каждые 30 сек");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Ошибка подключения Athyx");
+    } finally {
+      setAthyxConnecting(false);
+    }
+  }, [athyxApiKey, storeAthyxApiKey, syncNow, testAthyxKey]);
+
+  const handleCheckWatch = useCallback(async () => {
+    setWatchChecking(true);
+    try {
+      const res = await GarminBridge.isWatchAvailable();
+      if (res.available) {
+        toast.success("Часы Garmin на связи ✅");
+      } else {
+        toast.info("Часы не найдены — проверь, что приложение установлено в Connect IQ Store на часах и они рядом с телефоном");
+      }
+    } finally {
+      setWatchChecking(false);
+    }
+  }, []);
+
   const handlePolarConnect = useCallback(() => {
     // We need the actual POLAR_CLIENT_ID from env vars on the frontend
     // For now, use a Convex query to get the OAuth URL
@@ -204,7 +278,7 @@ export default function Devices() {
   }, [connect, polarRedirectUri, POLAR_CLIENT_ID]);
 
   const handleSync = useCallback(
-    async (type: "garmin" | "polar" | "healthConnect") => {
+    async (type: DeviceType) => {
       setSyncing((prev) => ({ ...prev, [type]: true }));
       try {
         await syncNow({ type });
@@ -221,7 +295,7 @@ export default function Devices() {
   );
 
   const handleDisconnect = useCallback(
-    async (type: "garmin" | "polar" | "healthConnect") => {
+    async (type: DeviceType) => {
       try {
         await disconnect({ type });
         toast.success(`${deviceInfo[type].name} отключён`);
@@ -247,10 +321,7 @@ export default function Devices() {
         animate="show"
         className="space-y-4"
       >
-        {(Object.entries(deviceInfo) as [
-          "garmin" | "polar" | "healthConnect",
-          DeviceMeta
-        ][]).map(([type, info]) => {
+        {(Object.entries(deviceInfo) as [DeviceType, DeviceMeta][]).map(([type, info]) => {
           const device = getDeviceStatus(type);
           const isConnected = device?.status === "connected";
           const isSyncing = syncing[type];
@@ -297,12 +368,42 @@ export default function Devices() {
                             {new Date(device.lastSync).toLocaleString("ru-RU")}
                           </p>
                         )}
+                        {type === "athyx" && isConnected && latestLactate && (
+                          <div className="flex items-center gap-2 mt-2">
+                            <Badge
+                              variant="outline"
+                              className={`text-xs ${zoneBadgeClass[lactateZone(latestLactate.lactateMM)]}`}
+                            >
+                              🩸 {latestLactate.lactateMM.toFixed(1)} ммоль/л
+                            </Badge>
+                            <span className="text-[10px] text-muted-foreground">
+                              {latestLactate.ageSeconds < 60
+                                ? `${latestLactate.ageSeconds} сек назад`
+                                : `${Math.round(latestLactate.ageSeconds / 60)} мин назад`}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
                       {isConnected ? (
                         <>
+                          {type === "athyx" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={handleCheckWatch}
+                              disabled={watchChecking}
+                            >
+                              {watchChecking ? (
+                                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Watch className="mr-1.5 h-3.5 w-3.5" />
+                              )}
+                              Часы
+                            </Button>
+                          )}
                           <Button
                             variant="outline"
                             size="sm"
@@ -333,6 +434,8 @@ export default function Devices() {
                               setGarminModalOpen(true);
                             } else if (type === "polar") {
                               handlePolarConnect();
+                            } else if (type === "athyx") {
+                              setAthyxModalOpen(true);
                             } else {
                               connect({ type: "healthConnect" });
                             }
@@ -382,6 +485,20 @@ export default function Devices() {
               <strong className="text-foreground">Health Connect:</strong>{" "}
               Установи Android-приложение AI Coach и настрой Health Connect —
               тренировки появятся на дашборде.
+            </p>
+          </div>
+          <div>
+            <p>
+              <strong className="text-foreground">Athyx FLUX I → часы Garmin:</strong>{" "}
+              NFC на часах Garmin недоступен сторонним приложениям (только для
+              Garmin Pay), поэтому лактат идёт другим путём: датчик передаёт
+              данные в приложение Athyx по Bluetooth и NFC-сканам, мы опрашиваем
+              официальный Athyx API раз в 30 секунд, а Android-приложение
+              AI Coach пересылает текущее значение на часы через приложение
+              Connect IQ (Garmin Connect IQ Mobile SDK). На часах нужно
+              установить companion-приложение из{" "}
+              <code className="text-[11px]">garmin-watch-app/</code> — см.
+              README в репозитории.
             </p>
           </div>
         </CardContent>
@@ -460,6 +577,70 @@ export default function Devices() {
                   <Link2 className="mr-1.5 h-4 w-4" />
                 )}
                 {garminConnecting ? "Подключение..." : "Подключить"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Athyx API Key Modal */}
+      <Dialog open={athyxModalOpen} onOpenChange={setAthyxModalOpen}>
+        <DialogContent className="glass border-0 max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Подключение Athyx FLUX I</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Создай read-only ключ на{" "}
+              <a
+                href="https://www.athyx.com/developers"
+                target="_blank"
+                rel="noreferrer"
+                className="underline"
+              >
+                athyx.com/developers
+              </a>{" "}
+              (раздел «Your keys») и вставь его сюда. Ключ виден только один
+              раз при создании.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="athyx-key">API-ключ</Label>
+              <div className="relative">
+                <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  id="athyx-key"
+                  type="text"
+                  placeholder="ath_live_..."
+                  value={athyxApiKey}
+                  onChange={(e) => setAthyxApiKey(e.target.value)}
+                  autoComplete="off"
+                  className="glass border-white/10 pl-9 font-mono text-xs"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end pt-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setAthyxModalOpen(false);
+                  setAthyxApiKey("");
+                }}
+              >
+                Отмена
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleAthyxConnect}
+                disabled={athyxConnecting}
+                className="glass-highlight"
+              >
+                {athyxConnecting ? (
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                ) : (
+                  <Link2 className="mr-1.5 h-4 w-4" />
+                )}
+                {athyxConnecting ? "Подключение..." : "Подключить"}
               </Button>
             </div>
           </div>
