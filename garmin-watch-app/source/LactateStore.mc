@@ -13,16 +13,23 @@ module LactateStore {
     var receivedAtMs as Number = 0;
 
     function update(data as Dictionary) as Void {
+        // Values arrive from the phone as Object — Communications doesn't
+        // preserve exact numeric type, so narrow with `as` before calling
+        // any numeric conversion method.
         if (data.hasKey("lactate")) {
-            var raw = data.get("lactate");
-            lactateMM = raw != null ? raw.toFloat() : lactateMM;
+            var raw = data.get("lactate") as Number or Float or Long or Double or Null;
+            if (raw != null) {
+                lactateMM = raw.toFloat();
+            }
         }
         if (data.hasKey("zone")) {
-            var rawZone = data.get("zone");
-            zone = rawZone != null ? rawZone.toNumber() : zone;
+            var rawZone = data.get("zone") as Number or Float or Long or Double or Null;
+            if (rawZone != null) {
+                zone = rawZone.toNumber();
+            }
         }
         if (data.hasKey("age")) {
-            var rawAge = data.get("age");
+            var rawAge = data.get("age") as Number or Float or Long or Double or Null;
             reportedAgeSec = rawAge != null ? rawAge.toNumber() : 0;
         }
         receivedAtMs = System.getTimer();

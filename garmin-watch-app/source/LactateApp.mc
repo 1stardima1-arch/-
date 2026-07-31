@@ -27,8 +27,8 @@ class LactateApp extends Application.AppBase {
         }
     }
 
-    function getInitialView() as Array<WatchUi.Views or WatchUi.InputDelegates>? {
-        return [ new LactateView(), new LactateDelegate() ];
+    function getInitialView() as [Views] or [Views, InputDelegates] {
+        return [ new LactateView(), new LactateDelegate() ] as [Views, InputDelegates];
     }
 }
 
