@@ -5,7 +5,7 @@
         launcherIcon="@Drawables.LauncherIcon"
         minSdkVersion="3.2.0"
         name="@Strings.AppName"
-        type="watch-app">
+        type="datafield">
 
         <iq:products>
             <iq:product id="fr255"/>

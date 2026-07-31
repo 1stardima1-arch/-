@@ -28,7 +28,7 @@ class LactateApp extends Application.AppBase {
     }
 
     function getInitialView() as [Views] or [Views, InputDelegates] {
-        return [ new LactateView(), new LactateDelegate() ] as [Views, InputDelegates];
+        return [ new LactateView() ] as [Views];
     }
 }
 

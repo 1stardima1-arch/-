@@ -11,12 +11,15 @@ That's not possible: Connect IQ has no public API for the watch's NFC radio
 So the data takes a different path:
 
 ```
-FLUX I  --Bluetooth/NFC-->  Athyx phone app  --Athyx REST API-->  Convex backend
+FLUX I  --Bluetooth/NFC-->  Athyx phone app  --Athyx REST API-->  AI Coach Android app
+                                                                  (polled every ~30s,
+                                                                   natively — see
+                                                                   GarminBridgePlugin
+                                                                   .fetchAthyxLatest)
                                                                         |
-                                                                (polled every 30s,
-                                                                 see ../src/convex/crons.ts)
+                                                                Connect IQ Mobile SDK
                                                                         v
-Garmin watch (this app)  <--Connect IQ Mobile SDK--  AI Coach Android app
+                                                              Garmin watch (this app)
 ```
 
 Because the official Athyx API is polled (not pushed), the watch shows a
@@ -78,20 +81,35 @@ section) and send a dictionary like `{"lactate" => 3.2, "zone" => 2, "age" => 5}
    `developer_key.der` from step 2 above.
 1. Connect the watch via USB (mass storage mode).
 2. Copy `bin/lactate.prg` into `GARMIN/APPS/` on the watch.
-3. Safely eject. The app appears in the watch's app list as **Lactate**.
-4. On the phone, install the **AI Coach** Android app, connect Athyx on the
-   Devices page (`ath_live_...` API key), and make sure **Garmin Connect
-   Mobile** is installed and paired with the watch — that's the app the
-   Connect IQ Mobile SDK actually talks to.
-5. Open **Lactate** on the watch during a session; the value updates every
-   time the Android app relays a new reading (roughly every 30s).
+3. Safely eject.
+4. On the phone, install the **AI Coach** Android app, connect Athyx (
+   `ath_live_...` API key), and make sure **Garmin Connect Mobile** is
+   installed and paired with the watch — that's the app the Connect IQ
+   Mobile SDK actually talks to.
+5. **Add Lactate as a data field to an activity** (this is a Connect IQ
+   Data Field, not a standalone app — it doesn't show up in the
+   Activities/Apps launcher list; it goes onto an existing sport's data
+   screens, same as Pace or Heart Rate). Two ways to add it:
+   - **On the watch:** start (or open the settings for) an activity like
+     Running/Roller Skiing/XC Skiing → hold the data screen you want →
+     Edit → Add Field → category **Connect IQ Fields** → **Lactate**.
+   - **In Garmin Connect Mobile:** More → device settings → the activity
+     (e.g. Running) → Data Screens → edit a screen → Add Field →
+     **Connect IQ Fields** → **Lactate** → sync to the watch.
+   Repeat per activity type you want it on (Running, Roller Skiing,
+   Skiing, ...) — a data field has to be added separately to each sport's
+   screens.
+6. Start that activity; the field updates every time the phone relays a
+   new reading (roughly every 30s).
 
 ## Files
 
-- `manifest.xml` — app id, target devices, permissions (`Communications`).
+- `manifest.xml` — app id, target devices, permissions (`Communications`),
+  `type="datafield"` (shows up as an addable field on activity data
+  screens rather than a standalone app in the Activities list).
 - `monkey.jungle` — Connect IQ project file.
-- `source/LactateApp.mc` — registers for phone messages, launches the view.
+- `source/LactateApp.mc` — registers for phone messages, launches the field.
 - `source/LactateStore.mc` — holds the last reading (singleton module).
-- `source/LactateView.mc` — draws the value, unit, zone color, and age.
-- `source/LactateDelegate.mc` — input handling (minimal).
+- `source/LactateView.mc` — the data field itself: draws the value, unit,
+  zone color, and age.
 - `resources/` — strings and the launcher icon.

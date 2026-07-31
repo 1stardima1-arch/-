@@ -1,34 +1,27 @@
 import Toybox.WatchUi;
 import Toybox.Graphics;
 import Toybox.Lang;
-import Toybox.Timer;
+import Toybox.Activity;
 
-class LactateView extends WatchUi.View {
-    var refreshTimer as Timer.Timer?;
-
+// A Data Field, not a standalone app — added to an activity's data screens
+// (Running, Roller Skiing, XC Skiing, ...) alongside pace/HR/etc, instead of
+// being launched on its own from the Activities/Apps list.
+class LactateView extends WatchUi.DataField {
     // Anything past this age is shown as stale rather than acted on as
     // fresh — the Athyx API is polled every ~30s, so this gives a couple
     // of missed cycles of slack before flagging it.
     const STALE_AFTER_SEC = 120;
 
     function initialize() {
-        View.initialize();
+        DataField.initialize();
     }
 
-    function onShow() as Void {
-        refreshTimer = new Timer.Timer();
-        refreshTimer.start(method(:onTimerTick), 1000, true);
-    }
-
-    function onHide() as Void {
-        if (refreshTimer != null) {
-            refreshTimer.stop();
-            refreshTimer = null;
-        }
-    }
-
-    function onTimerTick() as Void {
-        WatchUi.requestUpdate();
+    // The value comes from LactateStore (pushed by the phone over
+    // Communications), not from `info` or this return value — onUpdate()
+    // below draws straight from the store. This still has to satisfy
+    // DataField's compute() signature to compile.
+    function compute(info as Activity.Info) as Numeric or Duration or String or Null {
+        return null;
     }
 
     function onUpdate(dc as Graphics.Dc) as Void {
@@ -44,7 +37,7 @@ class LactateView extends WatchUi.View {
         if (!LactateStore.hasData) {
             dc.drawText(
                 cx, cy,
-                Graphics.FONT_MEDIUM,
+                Graphics.FONT_TINY,
                 WatchUi.loadResource(Rez.Strings.Waiting) as String,
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
             );
@@ -56,17 +49,19 @@ class LactateView extends WatchUi.View {
 
         dc.setColor(stale ? Graphics.COLOR_DK_GRAY : zoneColorFor(LactateStore.zone), bg);
         dc.drawText(
-            cx, cy - 25,
-            Graphics.FONT_NUMBER_HOT,
+            cx, cy - (h / 8),
+            Graphics.FONT_NUMBER_MEDIUM,
             LactateStore.lactateMM.format("%.1f"),
-            Graphics.TEXT_JUSTIFY_CENTER
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
         );
 
-        dc.setColor(Graphics.COLOR_LT_GRAY, bg);
-        dc.drawText(cx, cy + 28, Graphics.FONT_TINY, "ммоль/л", Graphics.TEXT_JUSTIFY_CENTER);
-
         dc.setColor(stale ? Graphics.COLOR_ORANGE : Graphics.COLOR_LT_GRAY, bg);
-        dc.drawText(cx, cy + 55, Graphics.FONT_XTINY, formatAge(age), Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(
+            cx, cy + (h / 3),
+            Graphics.FONT_XTINY,
+            formatAge(age),
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
+        );
     }
 
     function zoneColorFor(zone as Number) as Graphics.ColorValue {
@@ -84,8 +79,8 @@ class LactateView extends WatchUi.View {
 
     function formatAge(age as Number) as String {
         if (age < 60) {
-            return age.format("%d") + " сек назад";
+            return age.format("%d") + " с";
         }
-        return (age / 60).format("%d") + " мин назад";
+        return (age / 60).format("%d") + " м";
     }
 }
