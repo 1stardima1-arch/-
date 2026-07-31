@@ -1,18 +1,22 @@
-import { useEffect } from "react";
-import { useNavigate } from "react-router";
+import { useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { AthyxConnectCard } from "@/components/AthyxConnectCard";
-import { Button } from "@/components/ui/button";
-import { Loader2, LogOut } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 // The entire app, distilled: open it, see one button, bind Athyx. Nothing else.
+// Signs in anonymously in the background — no email/code screen to sit through.
 export default function Connect() {
-  const { isLoading, isAuthenticated, signOut } = useAuth();
-  const navigate = useNavigate();
+  const { isLoading, isAuthenticated, signIn } = useAuth();
+  const signingIn = useRef(false);
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) navigate("/auth", { replace: true });
-  }, [isLoading, isAuthenticated, navigate]);
+    if (!isLoading && !isAuthenticated && !signingIn.current) {
+      signingIn.current = true;
+      signIn("anonymous").catch(() => {
+        signingIn.current = false;
+      });
+    }
+  }, [isLoading, isAuthenticated, signIn]);
 
   if (isLoading || !isAuthenticated) {
     return (
@@ -23,15 +27,7 @@ export default function Connect() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-6 relative">
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={() => signOut()}
-        className="absolute top-4 right-4 text-muted-foreground"
-      >
-        <LogOut className="h-4 w-4" />
-      </Button>
+    <div className="min-h-screen flex items-center justify-center bg-background p-6">
       <div className="w-full max-w-sm">
         <AthyxConnectCard />
       </div>
