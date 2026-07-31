@@ -23,8 +23,8 @@ import java.util.Map;
  * (must be installed and paired with the watch), which relays messages to
  * the watch over Bluetooth — this plugin never touches Bluetooth directly.
  *
- * Requires the Connect IQ Mobile SDK AAR to be placed in android/app/libs/
- * (see garmin-watch-app/README.md — Garmin does not publish it to Maven).
+ * The SDK itself (com.garmin.connectiq:ciq-companion-app-sdk) is resolved
+ * from Maven Central via android/app/build.gradle — no manual download.
  */
 @CapacitorPlugin(name = "GarminBridge")
 public class GarminBridgePlugin extends Plugin {
@@ -77,7 +77,7 @@ public class GarminBridgePlugin extends Plugin {
                 }
             }
             return connected;
-        } catch (InvalidStateException e) {
+        } catch (InvalidStateException | ServiceUnavailableException e) {
             Log.w(TAG, "getKnownDevices failed", e);
             return null;
         }
