@@ -27,6 +27,9 @@ import { lactateZone } from "@/hooks/use-garmin-lactate-bridge";
 
 const STORAGE_KEY = "athyx_api_key";
 const POLL_INTERVAL_MS = 30_000;
+// Athyx returned 429 (rate limited) — back off instead of hammering it
+// again next tick, which would just draw another 429.
+const RATE_LIMIT_BACKOFF_MS = 120_000;
 
 const zoneBadgeClass: Record<number, string> = {
   1: "border-chart-2/30 text-chart-2",
@@ -65,14 +68,25 @@ export function AthyxConnectCard() {
 
   const apiKeyRef = useRef<string | null>(null);
   apiKeyRef.current = apiKey;
+  const backoffUntilRef = useRef(0);
 
   useEffect(() => {
     setApiKey(localStorage.getItem(STORAGE_KEY));
   }, []);
 
   const syncOnce = useCallback(async (key: string, { silent }: { silent: boolean }) => {
+    if (Date.now() < backoffUntilRef.current) {
+      if (!silent) {
+        const waitSec = Math.ceil((backoffUntilRef.current - Date.now()) / 1000);
+        toast.info(`Athyx ограничивает частоту запросов — подожди ${waitSec} сек`);
+      }
+      return false;
+    }
     const res = await GarminBridge.fetchAthyxLatest({ apiKey: key });
     if (!res.success) {
+      if (res.error === "http_429") {
+        backoffUntilRef.current = Date.now() + RATE_LIMIT_BACKOFF_MS;
+      }
       if (!silent) toast.error(errorMessage(res.error));
       return false;
     }
@@ -116,6 +130,7 @@ export function AthyxConnectCard() {
     try {
       const res = await GarminBridge.fetchAthyxLatest({ apiKey: key });
       if (!res.success) {
+        if (res.error === "http_429") backoffUntilRef.current = Date.now() + RATE_LIMIT_BACKOFF_MS;
         toast.error(errorMessage(res.error));
         return;
       }
@@ -124,11 +139,21 @@ export function AthyxConnectCard() {
       toast.success("Athyx подключён");
       setModalOpen(false);
       setInputValue("");
-      await syncOnce(key, { silent: true });
+      // Reuse this response instead of firing a second request right away.
+      if (res.hasReading && res.lactateMM !== undefined) {
+        const timestamp = res.startedAt ? new Date(res.startedAt).getTime() : Date.now();
+        setLatest({ lactateMM: res.lactateMM, peakLactateMM: res.peakLactateMM, timestamp });
+        await GarminBridge.sendLactate({
+          lactateMM: res.lactateMM,
+          zone: lactateZone(res.lactateMM),
+          ageSeconds: Math.round((Date.now() - timestamp) / 1000),
+          timestamp,
+        });
+      }
     } finally {
       setConnecting(false);
     }
-  }, [inputValue, syncOnce]);
+  }, [inputValue]);
 
   const handleSync = useCallback(async () => {
     if (!apiKey) return;
