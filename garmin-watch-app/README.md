@@ -65,6 +65,17 @@ section) and send a dictionary like `{"lactate" => 3.2, "zone" => 2, "age" => 5}
 
 ## Install on your watch
 
+0. **Enable Developer Mode on the watch first** (one-time, per watch) — by
+   default Garmin firmware only trusts Connect IQ Store apps and will
+   silently delete a sideloaded one after a while. Install Garmin Express
+   on a computer, connect the watch over USB, open the device's page, and
+   look for a "Developer Mode" toggle (often hidden behind repeatedly
+   tapping the software-version/about text, the same pattern as unlocking
+   Android's developer options). The exact spot moves between Garmin
+   Express versions — search "Garmin Express enable developer mode" for
+   your specific watch model if it isn't obvious. This does not require a
+   registered Connect IQ Store developer account, only the self-generated
+   `developer_key.der` from step 2 above.
 1. Connect the watch via USB (mass storage mode).
 2. Copy `bin/lactate.prg` into `GARMIN/APPS/` on the watch.
 3. Safely eject. The app appears in the watch's app list as **Lactate**.
