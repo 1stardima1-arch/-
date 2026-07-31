@@ -25,9 +25,10 @@ flow: FLUX I → Athyx phone app → Athyx REST API (polled every 30s by a
 Convex cron, `src/convex/sync/athyx.ts` / `src/convex/crons.ts`) → Android
 app (`src/hooks/use-garmin-lactate-bridge.ts`) → native `GarminBridge`
 Capacitor plugin (`android/app/src/main/java/com/aicoach/app/GarminBridgePlugin.java`,
-wraps the Connect IQ Mobile SDK) → the watch app in `garmin-watch-app/`.
-Connect devices on the `/devices` page. See `garmin-watch-app/README.md` and
-`android/app/libs/README.md` for the manual SDK setup both sides need.
+wraps the Connect IQ Mobile SDK, resolved automatically from Maven Central)
+→ the watch app in `garmin-watch-app/`. Connect devices on the `/devices`
+page. See `garmin-watch-app/README.md` for the Connect IQ SDK setup needed
+to build/sideload the watch app (the Android side needs no manual SDK setup).
 
 ## Setup
 

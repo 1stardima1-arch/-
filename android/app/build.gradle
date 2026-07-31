@@ -32,11 +32,9 @@ repositories {
 
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
-    // Garmin Connect IQ Mobile SDK — not published to Maven, download from
-    // developer.garmin.com/connect-iq/sdk/ and place the AAR at
-    // android/app/libs/connectiq-android-lib.aar (see garmin-watch-app/README.md).
-    // GarminBridgePlugin.java will fail to compile until this file is present.
-    implementation(name: 'connectiq-android-lib', ext: 'aar')
+    // Garmin Connect IQ Mobile SDK — published to Maven Central, resolved
+    // automatically at build time. No manual download needed.
+    implementation "com.garmin.connectiq:ciq-companion-app-sdk:2.4.0"
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"

@@ -1,18 +1,10 @@
 # Connect IQ Mobile SDK
 
-`GarminBridgePlugin.java` needs Garmin's Connect IQ Mobile SDK for Android,
-which Garmin does not publish to Maven — you have to download it yourself:
+`GarminBridgePlugin.java` uses Garmin's Connect IQ Mobile SDK for Android.
+It's published on Maven Central as `com.garmin.connectiq:ciq-companion-app-sdk`
+and declared as a normal dependency in `android/app/build.gradle` — Gradle
+resolves it automatically at build time, no manual download needed.
 
-1. Sign in at https://developer.garmin.com/connect-iq/connect-iq-basics/getting-started-mobile-sdk/
-   and download the Connect IQ Mobile SDK for Android.
-2. Copy the AAR file into this directory and rename it to:
-   ```
-   android/app/libs/connectiq-android-lib.aar
-   ```
-   (the exact filename `build.gradle` references via `implementation(name:
-   'connectiq-android-lib', ext: 'aar')`).
-
-Until this file is present, any build that compiles `GarminBridgePlugin.java`
-will fail with "cannot find symbol" for `com.garmin.android.connectiq.*` —
-that's expected, not a bug. See `../../../garmin-watch-app/README.md` for
-the rest of the setup.
+This `libs/` folder itself is just Capacitor's default local-jar directory
+(referenced by `android/app/build.gradle`'s `fileTree(dir: 'libs')`); it's
+fine for it to stay empty.
