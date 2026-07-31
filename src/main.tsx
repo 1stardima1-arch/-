@@ -17,7 +17,7 @@ import "./index.css";
 
 const PolarCallback = lazy(() => import("./pages/PolarCallback.tsx"));
 const AppShell = lazy(() => import("./components/layout/AppShell").then(m => ({ default: m.AppShell })));
-const Landing = lazy(() => import("./pages/Landing.tsx"));
+const Connect = lazy(() => import("./pages/Connect.tsx"));
 const AuthPage = lazy(() => import("./pages/Auth.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
@@ -68,8 +68,8 @@ function App() {
               <RouteSyncer />
               <Suspense fallback={<RouteLoading />}>
                 <Routes>
-                  <Route path="/" element={<Landing />} />
-                  <Route path="/auth" element={<AuthPage redirectAfterAuth="/dashboard" />} />
+                  <Route path="/" element={<Connect />} />
+                  <Route path="/auth" element={<AuthPage redirectAfterAuth="/" />} />
                   <Route path="/onboarding" element={<Onboarding />} />
                   <Route path="/oauth/polar/callback" element={<PolarCallback />} />
                   <Route element={<AppShell />}>
