@@ -26,10 +26,12 @@ import { GarminBridge } from "@/lib/garmin-bridge";
 import { lactateZone } from "@/hooks/use-garmin-lactate-bridge";
 
 const STORAGE_KEY = "athyx_api_key";
-const POLL_INTERVAL_MS = 30_000;
-// Athyx returned 429 (rate limited) — back off instead of hammering it
-// again next tick, which would just draw another 429.
-const RATE_LIMIT_BACKOFF_MS = 120_000;
+const POLL_INTERVAL_MS = 60_000;
+// Athyx returned 429 (rate limited) and gave no Retry-After — back off with
+// growing delays instead of retrying at a fixed interval that just draws
+// another 429 every time.
+const RATE_LIMIT_BASE_BACKOFF_MS = 60_000;
+const RATE_LIMIT_MAX_BACKOFF_MS = 15 * 60_000;
 
 const zoneBadgeClass: Record<number, string> = {
   1: "border-chart-2/30 text-chart-2",
@@ -69,6 +71,7 @@ export function AthyxConnectCard() {
   const apiKeyRef = useRef<string | null>(null);
   apiKeyRef.current = apiKey;
   const backoffUntilRef = useRef(0);
+  const consecutive429Ref = useRef(0);
 
   useEffect(() => {
     setApiKey(localStorage.getItem(STORAGE_KEY));
@@ -85,11 +88,23 @@ export function AthyxConnectCard() {
     const res = await GarminBridge.fetchAthyxLatest({ apiKey: key });
     if (!res.success) {
       if (res.error === "http_429") {
-        backoffUntilRef.current = Date.now() + RATE_LIMIT_BACKOFF_MS;
+        if (res.retryAfterSec !== undefined) {
+          // The server told us exactly how long — trust that over any guess.
+          backoffUntilRef.current = Date.now() + res.retryAfterSec * 1000;
+          consecutive429Ref.current = 0;
+        } else {
+          const backoffMs = Math.min(
+            RATE_LIMIT_BASE_BACKOFF_MS * Math.pow(2, consecutive429Ref.current),
+            RATE_LIMIT_MAX_BACKOFF_MS
+          );
+          backoffUntilRef.current = Date.now() + backoffMs;
+          consecutive429Ref.current += 1;
+        }
       }
       if (!silent) toast.error(errorMessage(res.error));
       return false;
     }
+    consecutive429Ref.current = 0;
     if (res.hasReading && res.lactateMM !== undefined) {
       const timestamp = res.startedAt ? new Date(res.startedAt).getTime() : Date.now();
       const reading: LatestLactate = {
@@ -130,7 +145,10 @@ export function AthyxConnectCard() {
     try {
       const res = await GarminBridge.fetchAthyxLatest({ apiKey: key });
       if (!res.success) {
-        if (res.error === "http_429") backoffUntilRef.current = Date.now() + RATE_LIMIT_BACKOFF_MS;
+        if (res.error === "http_429") {
+          const backoffMs = res.retryAfterSec !== undefined ? res.retryAfterSec * 1000 : RATE_LIMIT_BASE_BACKOFF_MS;
+          backoffUntilRef.current = Date.now() + backoffMs;
+        }
         toast.error(errorMessage(res.error));
         return;
       }

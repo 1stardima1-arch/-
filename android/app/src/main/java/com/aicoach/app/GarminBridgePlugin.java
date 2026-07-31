@@ -210,6 +210,19 @@ public class GarminBridgePlugin extends Plugin {
                     JSObject ret = new JSObject();
                     ret.put("success", false);
                     ret.put("error", "http_" + status);
+                    if (status == 429) {
+                        // Retry-After is usually a plain integer number of
+                        // seconds for rate limits (not the HTTP-date form) —
+                        // use it verbatim when present instead of guessing.
+                        String retryAfter = conn.getHeaderField("Retry-After");
+                        if (retryAfter != null) {
+                            try {
+                                ret.put("retryAfterSec", Integer.parseInt(retryAfter.trim()));
+                            } catch (NumberFormatException ignored) {
+                                // HTTP-date form or unparseable — caller falls back to its own backoff.
+                            }
+                        }
+                    }
                     call.resolve(ret);
                     return;
                 }

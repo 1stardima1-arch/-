@@ -15,6 +15,9 @@ export interface AthyxLatestResult {
   avgHR?: number;
   startedAt?: string;
   error?: string;
+  // Present when error is "http_429" and the server sent a plain-integer
+  // Retry-After header — the authoritative wait time, if given.
+  retryAfterSec?: number;
 }
 
 export interface GarminBridgePlugin {
