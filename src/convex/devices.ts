@@ -8,10 +8,15 @@ export const list = query({
   handler: async (ctx) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return [];
-    return await ctx.db
-      .query("devices")
-      .withIndex("by_user_type", (q) => q.eq("userId", userId))
-      .collect();
+    try {
+      return await ctx.db
+        .query("devices")
+        .withIndex("by_user_type", (q) => q.eq("userId", userId))
+        .collect();
+    } catch (e) {
+      console.error("devices.list failed:", e);
+      return [];
+    }
   },
 });
 
@@ -136,20 +141,25 @@ export const getLatestLactate = query({
     const userId = await getAuthUserId(ctx);
     if (!userId) return null;
 
-    const reading = await ctx.db
-      .query("lactateReadings")
-      .withIndex("by_user_timestamp", (q) => q.eq("userId", userId))
-      .order("desc")
-      .first();
+    try {
+      const reading = await ctx.db
+        .query("lactateReadings")
+        .withIndex("by_user_timestamp", (q) => q.eq("userId", userId))
+        .order("desc")
+        .first();
 
-    if (!reading) return null;
-    return {
-      lactateMM: reading.lactateMM,
-      peakLactateMM: reading.peakLactateMM,
-      avgHR: reading.avgHR,
-      timestamp: reading.timestamp,
-      ageSeconds: Math.round((Date.now() - reading.timestamp) / 1000),
-    };
+      if (!reading) return null;
+      return {
+        lactateMM: reading.lactateMM,
+        peakLactateMM: reading.peakLactateMM,
+        avgHR: reading.avgHR,
+        timestamp: reading.timestamp,
+        ageSeconds: Math.round((Date.now() - reading.timestamp) / 1000),
+      };
+    } catch (e) {
+      console.error("devices.getLatestLactate failed:", e);
+      return null;
+    }
   },
 });
 
