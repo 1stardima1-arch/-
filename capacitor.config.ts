@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.aicoach.app',
-  appName: 'AI Coach',
+  appName: 'Athyx Connect',
   webDir: 'dist',
   server: {
     cleartext: true,

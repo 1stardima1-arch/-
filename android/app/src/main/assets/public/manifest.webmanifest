@@ -1,7 +1,7 @@
 {
-  "name": "freebuff.com application",
-  "short_name": "freebuff.com",
-  "description": "freebuff.com application",
+  "name": "Athyx Connect",
+  "short_name": "Athyx Connect",
+  "description": "Привязка датчика лактата Athyx FLUX I к часам Garmin",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
