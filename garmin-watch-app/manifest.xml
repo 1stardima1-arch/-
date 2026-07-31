@@ -1,7 +1,7 @@
 <iq:manifest xmlns:iq="http://www.garmin.com/xml/connectiq" version="3">
     <iq:application
         entry="LactateApp"
-        id="3f9a2b6e-6b7c-4c1a-9d0e-1a2b3c4d5e6f"
+        id="88fb7b13-9854-415f-8504-3c32d19cea84"
         launcherIcon="@Drawables.LauncherIcon"
         minSdkVersion="3.2.0"
         name="@Strings.AppName"

@@ -40,7 +40,7 @@ public class GarminBridgePlugin extends Plugin {
     private static final String TAG = "GarminBridge";
 
     // Must match the <iq:application id="..."> UUID in garmin-watch-app/manifest.xml
-    private static final String WATCH_APP_ID = "3f9a2b6e-6b7c-4c1a-9d0e-1a2b3c4d5e6f";
+    private static final String WATCH_APP_ID = "88fb7b13-9854-415f-8504-3c32d19cea84";
 
     // GET /v1/sessions?limit=1 per athyx.com/developers — read-only, Bearer
     // API key. Done natively (not a browser fetch()) so it isn't subject to

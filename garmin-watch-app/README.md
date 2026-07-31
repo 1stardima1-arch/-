@@ -102,6 +102,22 @@ section) and send a dictionary like `{"lactate" => 3.2, "zone" => 2, "age" => 5}
 6. Start that activity; the field updates every time the phone relays a
    new reading (roughly every 30s).
 
+### If Lactate still doesn't show up in Connect IQ Fields after rebuilding
+
+This app's UUID used to be registered on the watch as a *standalone app*
+(`type="watch-app"`), before it became a data field. Garmin's own app
+registry on some watches is known to get stuck treating a UUID as its
+original type even after you sideload a new `.prg` with a different
+`type` — see [Garmin's Connect IQ dev forum on this exact
+problem](https://forums.garmin.com/developer/connect-iq/f/discussion/3303/sideload-a-data-field).
+The fix is a fresh UUID, which this repo's `manifest.xml` and
+`GarminBridgePlugin.java`'s `WATCH_APP_ID` already carry as of this
+commit — **both must always match, and both must be rebuilt/reinstalled
+together** (a new watch `.prg` paired with an old phone APK, or vice
+versa, will silently fail to communicate since they're addressing
+different app IDs). If you ever regenerate the UUID again (VS Code:
+Command Palette → "Monkey C: Regenerate UUID"), update both files.
+
 ## Files
 
 - `manifest.xml` — app id, target devices, permissions (`Communications`),
