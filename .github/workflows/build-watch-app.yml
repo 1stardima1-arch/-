@@ -30,7 +30,7 @@ jobs:
           echo "----- agreement view output -----"
           connect-iq-sdk-manager agreement view | tee /tmp/agreement.txt
           echo "----------------------------------"
-          HASH=$(grep -oE '[a-f0-9]{32,64}' /tmp/agreement.txt | head -1)
+          HASH=$(grep -oE '[A-Fa-f0-9]{32,64}' /tmp/agreement.txt | head -1)
           if [ -z "$HASH" ]; then
             echo "::error::Could not find a hash in the agreement view output above — inspect it and adjust this step."
             exit 1
