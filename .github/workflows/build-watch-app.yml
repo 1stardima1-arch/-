@@ -1,0 +1,71 @@
+name: Build Garmin Watch App (Connect IQ)
+
+# Builds garmin-watch-app/ into a sideloadable .prg without needing the
+# Connect IQ SDK / VS Code extension installed locally. Requires two repo
+# secrets (Settings -> Secrets and variables -> Actions -> New repository
+# secret), since Garmin gates SDK downloads behind a developer login:
+#   GARMIN_USERNAME, GARMIN_PASSWORD  — your normal Garmin account login
+#
+# Uses the third-party CLI https://github.com/lindell/connect-iq-sdk-manager-cli
+# (there is no official headless Garmin tool) since it's designed for
+# exactly this: scripted/CI installs of the SDK without the GUI SDK Manager.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install connect-iq-sdk-manager
+        run: |
+          curl -sS https://raw.githubusercontent.com/lindell/connect-iq-sdk-manager-cli/master/install.sh \
+            | sh -s -- -b /usr/local/bin
+          connect-iq-sdk-manager --help
+
+      - name: Accept Garmin's Connect IQ SDK license agreement
+        run: |
+          echo "----- agreement view output -----"
+          connect-iq-sdk-manager agreement view | tee /tmp/agreement.txt
+          echo "----------------------------------"
+          HASH=$(grep -oE '[a-f0-9]{32,64}' /tmp/agreement.txt | head -1)
+          if [ -z "$HASH" ]; then
+            echo "::error::Could not find a hash in the agreement view output above — inspect it and adjust this step."
+            exit 1
+          fi
+          echo "Using agreement hash: $HASH"
+          connect-iq-sdk-manager agreement accept -H "$HASH"
+
+      - name: Log in to Garmin
+        env:
+          GARMIN_USERNAME: ${{ secrets.GARMIN_USERNAME }}
+          GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
+        run: connect-iq-sdk-manager login
+
+      - name: Download and select the Connect IQ SDK
+        run: |
+          connect-iq-sdk-manager sdk set '>=6.0.0'
+          echo "$(connect-iq-sdk-manager sdk current-path --bin)" >> "$GITHUB_PATH"
+
+      - name: Download device support for this app's manifest
+        run: connect-iq-sdk-manager device download --manifest=garmin-watch-app/manifest.xml
+
+      - name: Generate a developer signing key (ephemeral — fine for sideload testing)
+        run: |
+          cd garmin-watch-app
+          openssl genrsa -out developer_key.pem 4096
+          openssl pkcs8 -topk8 -inform PEM -outform DER -in developer_key.pem -out developer_key.der -nocrypt
+
+      - name: Build the .prg
+        run: |
+          cd garmin-watch-app
+          mkdir -p bin
+          monkeyc -d fr265 -f monkey.jungle -o bin/lactate.prg -y developer_key.der -w
+
+      - name: Upload .prg (copy this to GARMIN/APPS on the watch)
+        uses: actions/upload-artifact@v4
+        with:
+          name: garmin-lactate-prg
+          path: garmin-watch-app/bin/lactate.prg
