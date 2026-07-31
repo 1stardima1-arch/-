@@ -1,5 +1,3 @@
-import { useQuery, useMutation, useAction } from "convex/react";
-import { api } from "@/convex/_generated/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,16 +9,14 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import {
   Watch,
   RefreshCw,
   Unplug,
   Link2,
-  AlertCircle,
   CheckCircle2,
   XCircle,
-  Clock,
   Loader2,
   Droplet,
   Key,
@@ -29,31 +25,8 @@ import { toast } from "sonner";
 import { GarminBridge } from "@/lib/garmin-bridge";
 import { lactateZone } from "@/hooks/use-garmin-lactate-bridge";
 
-const statusIcon = (status?: string) => {
-  switch (status) {
-    case "connected":
-      return <CheckCircle2 className="h-4 w-4 text-chart-2" />;
-    case "disconnected":
-      return <XCircle className="h-4 w-4 text-muted-foreground" />;
-    case "unavailable":
-      return <AlertCircle className="h-4 w-4 text-chart-5" />;
-    default:
-      return <Clock className="h-4 w-4 text-muted-foreground" />;
-  }
-};
-
-const statusLabel = (status?: string) => {
-  switch (status) {
-    case "connected":
-      return "Подключено";
-    case "disconnected":
-      return "Отключено";
-    case "unavailable":
-      return "Недоступно";
-    default:
-      return "Не подключено";
-  }
-};
+const STORAGE_KEY = "athyx_api_key";
+const POLL_INTERVAL_MS = 30_000;
 
 const zoneBadgeClass: Record<number, string> = {
   1: "border-chart-2/30 text-chart-2",
@@ -62,70 +35,116 @@ const zoneBadgeClass: Record<number, string> = {
   4: "border-rose-500/30 text-rose-400",
 };
 
+type LatestLactate = {
+  lactateMM: number;
+  peakLactateMM?: number;
+  timestamp: number;
+};
+
+function errorMessage(error?: string): string {
+  if (error === "invalid_key") return "Athyx отклонил ключ — проверь, что он скопирован полностью";
+  if (error?.startsWith("http_")) return `Athyx: сервер ответил ${error.slice(5)}`;
+  if (!error) return "Не удалось связаться с Athyx";
+  return `Athyx: ${error}`;
+}
+
 // Athyx FLUX I connect/status card — the one and only thing a user needs
-// to bind their lactate sensor. Reused as the app's entry screen and as
-// the top card on the fuller Devices settings page.
+// to bind their lactate sensor. Talks to Athyx and the Garmin watch
+// entirely through the native GarminBridge plugin: the API key lives only
+// on this device (localStorage), and every ~30s a fresh reading is fetched
+// and relayed to the watch. No backend, no account, nothing to deploy.
 export function AthyxConnectCard() {
-  const devices = useQuery(api.devices.list);
-  const latestLactate = useQuery(api.devices.getLatestLactate);
-  const syncNow = useMutation(api.devices.syncNow);
-  const disconnect = useMutation(api.devices.disconnect);
-  const storeAthyxApiKey = useMutation(api.devices.storeAthyxApiKey);
-  const testAthyxKey = useAction(api.sync.athyx.testAthyxKey);
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [latest, setLatest] = useState<LatestLactate | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [apiKey, setApiKey] = useState("");
+  const [inputValue, setInputValue] = useState("");
   const [connecting, setConnecting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [watchChecking, setWatchChecking] = useState(false);
 
-  const device = devices?.find((d) => d.type === "athyx");
-  const connected = device?.status === "connected";
+  const apiKeyRef = useRef<string | null>(null);
+  apiKeyRef.current = apiKey;
+
+  useEffect(() => {
+    setApiKey(localStorage.getItem(STORAGE_KEY));
+  }, []);
+
+  const syncOnce = useCallback(async (key: string, { silent }: { silent: boolean }) => {
+    const res = await GarminBridge.fetchAthyxLatest({ apiKey: key });
+    if (!res.success) {
+      if (!silent) toast.error(errorMessage(res.error));
+      return false;
+    }
+    if (res.hasReading && res.lactateMM !== undefined) {
+      const timestamp = res.startedAt ? new Date(res.startedAt).getTime() : Date.now();
+      const reading: LatestLactate = {
+        lactateMM: res.lactateMM,
+        peakLactateMM: res.peakLactateMM,
+        timestamp,
+      };
+      setLatest(reading);
+      await GarminBridge.sendLactate({
+        lactateMM: reading.lactateMM,
+        zone: lactateZone(reading.lactateMM),
+        ageSeconds: Math.round((Date.now() - timestamp) / 1000),
+        timestamp,
+      });
+    } else if (!silent) {
+      toast.info("Athyx подключён — сессий пока нет");
+    }
+    return true;
+  }, []);
+
+  // Poll every 30s while a key is set, relaying each fresh reading to the watch.
+  useEffect(() => {
+    if (!apiKey) return;
+    const tick = () => {
+      if (apiKeyRef.current) syncOnce(apiKeyRef.current, { silent: true });
+    };
+    const id = setInterval(tick, POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [apiKey, syncOnce]);
 
   const handleConnect = useCallback(async () => {
-    if (!apiKey.trim()) {
+    const key = inputValue.trim();
+    if (!key) {
       toast.error("Введи API-ключ Athyx (ath_live_...)");
       return;
     }
     setConnecting(true);
     try {
-      const testResult = await testAthyxKey({ apiKey: apiKey.trim() });
-      if (!testResult.success) {
-        toast.error(testResult.message || "Ошибка подключения к Athyx");
+      const res = await GarminBridge.fetchAthyxLatest({ apiKey: key });
+      if (!res.success) {
+        toast.error(errorMessage(res.error));
         return;
       }
-
-      await storeAthyxApiKey({ apiKey: apiKey.trim() });
+      localStorage.setItem(STORAGE_KEY, key);
+      setApiKey(key);
       toast.success("Athyx подключён");
       setModalOpen(false);
-      setApiKey("");
-
-      await syncNow({ type: "athyx" });
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Ошибка подключения Athyx");
+      setInputValue("");
+      await syncOnce(key, { silent: true });
     } finally {
       setConnecting(false);
     }
-  }, [apiKey, storeAthyxApiKey, syncNow, testAthyxKey]);
+  }, [inputValue, syncOnce]);
 
   const handleSync = useCallback(async () => {
+    if (!apiKey) return;
     setSyncing(true);
     try {
-      await syncNow({ type: "athyx" });
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Ошибка синхронизации");
+      await syncOnce(apiKey, { silent: false });
     } finally {
       setSyncing(false);
     }
-  }, [syncNow]);
+  }, [apiKey, syncOnce]);
 
-  const handleDisconnect = useCallback(async () => {
-    try {
-      await disconnect({ type: "athyx" });
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Ошибка отключения");
-    }
-  }, [disconnect]);
+  const handleDisconnect = useCallback(() => {
+    localStorage.removeItem(STORAGE_KEY);
+    setApiKey(null);
+    setLatest(null);
+  }, []);
 
   const handleCheckWatch = useCallback(async () => {
     setWatchChecking(true);
@@ -141,6 +160,9 @@ export function AthyxConnectCard() {
     }
   }, []);
 
+  const connected = apiKey !== null;
+  const ageSeconds = latest ? Math.round((Date.now() - latest.timestamp) / 1000) : null;
+
   return (
     <>
       <Card className="glass border-0 overflow-hidden ring-1 ring-rose-400/20">
@@ -155,24 +177,28 @@ export function AthyxConnectCard() {
               variant="outline"
               className={`text-xs ${connected ? "border-chart-2/30 text-chart-2" : ""}`}
             >
-              {statusIcon(device?.status)}
-              <span className="ml-1">{statusLabel(device?.status)}</span>
+              {connected ? (
+                <CheckCircle2 className="h-4 w-4" />
+              ) : (
+                <XCircle className="h-4 w-4 text-muted-foreground" />
+              )}
+              <span className="ml-1">{connected ? "Подключено" : "Не подключено"}</span>
             </Badge>
           </div>
 
-          {connected && latestLactate && (
+          {connected && latest && (
             <div className="flex items-center gap-2">
               <Badge
                 variant="outline"
-                className={`text-xs ${zoneBadgeClass[lactateZone(latestLactate.lactateMM)]}`}
+                className={`text-xs ${zoneBadgeClass[lactateZone(latest.lactateMM)]}`}
               >
-                🩸 {latestLactate.lactateMM.toFixed(1)} ммоль/л
+                🩸 {latest.lactateMM.toFixed(1)} ммоль/л
               </Badge>
-              <span className="text-[10px] text-muted-foreground">
-                {latestLactate.ageSeconds < 60
-                  ? `${latestLactate.ageSeconds} сек назад`
-                  : `${Math.round(latestLactate.ageSeconds / 60)} мин назад`}
-              </span>
+              {ageSeconds !== null && (
+                <span className="text-[10px] text-muted-foreground">
+                  {ageSeconds < 60 ? `${ageSeconds} сек назад` : `${Math.round(ageSeconds / 60)} мин назад`}
+                </span>
+              )}
             </div>
           )}
 
@@ -230,8 +256,8 @@ export function AthyxConnectCard() {
               <Input
                 type="text"
                 placeholder="ath_live_..."
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
                 autoComplete="off"
                 className="glass border-white/10 pl-9 font-mono text-xs"
                 autoFocus
@@ -243,7 +269,7 @@ export function AthyxConnectCard() {
                 size="sm"
                 onClick={() => {
                   setModalOpen(false);
-                  setApiKey("");
+                  setInputValue("");
                 }}
               >
                 Отмена

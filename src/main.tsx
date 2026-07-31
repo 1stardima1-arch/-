@@ -1,7 +1,5 @@
 import { Toaster } from "@/components/ui/sonner";
 import { InstrumentationProvider } from "@/instrumentation.tsx";
-import { ConvexAuthProvider } from "@convex-dev/auth/react";
-import { ConvexReactClient } from "convex/react";
 import { ThemeProvider } from "next-themes";
 import { StrictMode, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
@@ -20,20 +18,15 @@ function RouteLoading() {
   );
 }
 
-const CONVEX_URL = (import.meta.env.VITE_CONVEX_URL as string) || 'https://valiant-hippopotamus-723.convex.cloud';
-const convex = new ConvexReactClient(CONVEX_URL);
-
 function App() {
   return (
     <StrictMode>
       <InstrumentationProvider>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
-          <ConvexAuthProvider client={convex}>
-            <Suspense fallback={<RouteLoading />}>
-              <Connect />
-            </Suspense>
-            <Toaster />
-          </ConvexAuthProvider>
+          <Suspense fallback={<RouteLoading />}>
+            <Connect />
+          </Suspense>
+          <Toaster />
         </ThemeProvider>
       </InstrumentationProvider>
     </StrictMode>

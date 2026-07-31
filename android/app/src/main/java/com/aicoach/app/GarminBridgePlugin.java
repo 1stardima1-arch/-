@@ -13,9 +13,18 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Bridges lactate readings from the web app to the Garmin watch app over the
@@ -33,8 +42,15 @@ public class GarminBridgePlugin extends Plugin {
     // Must match the <iq:application id="..."> UUID in garmin-watch-app/manifest.xml
     private static final String WATCH_APP_ID = "3f9a2b6e-6b7c-4c1a-9d0e-1a2b3c4d5e6f";
 
+    // GET /v1/sessions?limit=1 per athyx.com/developers — read-only, Bearer
+    // API key. Done natively (not a browser fetch()) so it isn't subject to
+    // CORS, since the API is documented for "your own dashboards/scripts"
+    // rather than arbitrary browser origins.
+    private static final String ATHYX_API_BASE = "https://api.athyx.com/v1";
+
     private ConnectIQ connectIQ;
     private boolean sdkReady = false;
+    private final ExecutorService networkExecutor = Executors.newSingleThreadExecutor();
 
     private void ensureInitialized(Runnable onReady, Runnable onError) {
         if (sdkReady) {
@@ -159,5 +175,114 @@ public class GarminBridgePlugin extends Plugin {
                 call.resolve(ret);
             }
         );
+    }
+
+    // Tests/reads the Athyx key by fetching the most recent session. Used
+    // both to verify a freshly-pasted key and, on a JS-side interval, to
+    // poll for a new reading to relay to the watch — same endpoint either way.
+    @PluginMethod
+    public void fetchAthyxLatest(PluginCall call) {
+        String apiKey = call.getString("apiKey");
+        if (apiKey == null || apiKey.isEmpty()) {
+            call.reject("apiKey is required");
+            return;
+        }
+
+        networkExecutor.execute(() -> {
+            HttpURLConnection conn = null;
+            try {
+                URL url = new URL(ATHYX_API_BASE + "/sessions?limit=1");
+                conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(10000);
+
+                int status = conn.getResponseCode();
+                if (status == 401) {
+                    JSObject ret = new JSObject();
+                    ret.put("success", false);
+                    ret.put("error", "invalid_key");
+                    call.resolve(ret);
+                    return;
+                }
+                if (status < 200 || status >= 300) {
+                    JSObject ret = new JSObject();
+                    ret.put("success", false);
+                    ret.put("error", "http_" + status);
+                    call.resolve(ret);
+                    return;
+                }
+
+                BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) sb.append(line);
+                reader.close();
+
+                String body = sb.toString().trim();
+                JSONArray sessions;
+                if (body.startsWith("[")) {
+                    sessions = new JSONArray(body);
+                } else {
+                    JSONObject obj = new JSONObject(body);
+                    JSONArray fromSessions = obj.optJSONArray("sessions");
+                    JSONArray fromData = obj.optJSONArray("data");
+                    sessions = fromSessions != null ? fromSessions : (fromData != null ? fromData : new JSONArray());
+                }
+
+                JSObject ret = new JSObject();
+                ret.put("success", true);
+                if (sessions.length() == 0) {
+                    ret.put("hasReading", false);
+                    call.resolve(ret);
+                    return;
+                }
+
+                JSONObject session = sessions.getJSONObject(0);
+                Double lactate = firstNumber(session, "avg_lactate_mM", "avgLactateMM");
+                Double peak = firstNumber(session, "peak_lactate_mM", "peakLactateMM");
+                Double hr = firstNumber(session, "avg_hr", "avgHR");
+                String startedAt = firstString(session, "started_at", "startedAt", "date", "created_at");
+
+                ret.put("hasReading", lactate != null);
+                if (lactate != null) ret.put("lactateMM", lactate);
+                if (peak != null) ret.put("peakLactateMM", peak);
+                if (hr != null) ret.put("avgHR", hr);
+                if (startedAt != null) ret.put("startedAt", startedAt);
+                call.resolve(ret);
+            } catch (Exception e) {
+                Log.w(TAG, "fetchAthyxLatest failed", e);
+                JSObject ret = new JSObject();
+                ret.put("success", false);
+                ret.put("error", e.getMessage() != null ? e.getMessage() : "network_error");
+                call.resolve(ret);
+            } finally {
+                if (conn != null) conn.disconnect();
+            }
+        });
+    }
+
+    private Double firstNumber(JSONObject obj, String... keys) {
+        for (String k : keys) {
+            if (obj.has(k) && !obj.isNull(k)) {
+                try {
+                    return obj.getDouble(k);
+                } catch (Exception ignored) {
+                    // fall through to next key
+                }
+            }
+        }
+        return null;
+    }
+
+    private String firstString(JSONObject obj, String... keys) {
+        for (String k : keys) {
+            if (obj.has(k) && !obj.isNull(k)) {
+                String v = obj.optString(k, null);
+                if (v != null) return v;
+            }
+        }
+        return null;
     }
 }

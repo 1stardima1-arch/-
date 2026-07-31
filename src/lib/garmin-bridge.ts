@@ -7,6 +7,16 @@ export interface LactatePayload {
   timestamp: number;
 }
 
+export interface AthyxLatestResult {
+  success: boolean;
+  hasReading?: boolean;
+  lactateMM?: number;
+  peakLactateMM?: number;
+  avgHR?: number;
+  startedAt?: string;
+  error?: string;
+}
+
 export interface GarminBridgePlugin {
   // Sends the current lactate reading to the paired Connect IQ watch app.
   // Resolves once the message has been handed to the Connect IQ Mobile SDK —
@@ -15,6 +25,8 @@ export interface GarminBridgePlugin {
   sendLactate(payload: LactatePayload): Promise<{ sent: boolean; error?: string }>;
   // Whether a Connect IQ-capable Garmin device is currently paired and reachable.
   isWatchAvailable(): Promise<{ available: boolean }>;
+  // Fetches the most recent Athyx session (native HTTP call — no CORS risk).
+  fetchAthyxLatest(payload: { apiKey: string }): Promise<AthyxLatestResult>;
 }
 
 // On web/dev builds (no native plugin registered) calls resolve to safe
@@ -27,6 +39,9 @@ export const GarminBridge = registerPlugin<GarminBridgePlugin>("GarminBridge", {
     },
     async isWatchAvailable() {
       return { available: false };
+    },
+    async fetchAthyxLatest() {
+      return { success: false, error: "GarminBridge is only available on Android" };
     },
   }),
 });
