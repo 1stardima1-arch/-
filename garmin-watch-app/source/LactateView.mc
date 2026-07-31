@@ -2,6 +2,7 @@ import Toybox.WatchUi;
 import Toybox.Graphics;
 import Toybox.Lang;
 import Toybox.Activity;
+import Toybox.Time;
 
 // A Data Field, not a standalone app — added to an activity's data screens
 // (Running, Roller Skiing, XC Skiing, ...) alongside pace/HR/etc, instead of
