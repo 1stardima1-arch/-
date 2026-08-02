@@ -37,9 +37,10 @@ own direct polling (`onTemporalEvent`, capped at 5 min by Garmin) only
 matters when the phone app isn't installed, isn't paired, or isn't
 running — otherwise the phone push arrives first and the watch just
 displays whichever update lands most recently. The watch's own Athyx key
-(entered via Garmin Connect Mobile, see setup below) only needs to be set
-if you want that fallback to work; the Android app's key is what actually
-drives most updates.
+only matters for that fallback, and — because this app is sideloaded, not
+installed from the Connect IQ Store — Garmin Connect Mobile can't be used
+to set it (see setup below); the Android app's key is what actually drives
+most updates and needs no such workaround.
 
 ## Why not NFC?
 
@@ -102,33 +103,41 @@ Set the Athyx key first via the simulator's App Settings (gear icon).
 4. **For the fast path:** install the Android app, connect Athyx there
    (`ath_live_...` key), and make sure **Garmin Connect Mobile** is
    installed and paired with the watch — that's what the Connect IQ Mobile
-   SDK actually talks to when relaying a fresh reading.
-   **For the fallback path (optional but recommended):** also enter your
-   Athyx key in the watch app's own settings, so it still gets updates
-   every 5 min even if the phone app isn't running:
-   - Open **Garmin Connect Mobile** on your phone → your watch → **More** →
-     **Connect IQ Store / My apps** (wording varies by app version) →
-     **Lactate** → **Settings** (a gear icon) → paste your `ath_live_...`
-     key → save & sync to the watch.
-5. **Add Lactate as a data field to an activity** (this is a Connect IQ
-   Data Field, not a standalone app — it doesn't show up in the
-   Activities/Apps launcher list; it goes onto an existing sport's data
-   screens, same as Pace or Heart Rate). Two ways to add it:
-   - **On the watch:** start (or open the settings for) an activity like
-     Running/Roller Skiing/XC Skiing → hold the data screen you want →
-     Edit → Add Field → category **Connect IQ Fields** → **Lactate**.
-   - **In Garmin Connect Mobile:** More → device settings → the activity
-     (e.g. Running) → Data Screens → edit a screen → Add Field →
-     **Connect IQ Fields** → **Lactate** → sync to the watch.
-   Repeat per activity type you want it on (Running, Roller Skiing,
-   Skiing, ...) — a data field has to be added separately to each sport's
-   screens.
+   SDK actually talks to when relaying a fresh reading. This is enough on
+   its own; the rest of this step is optional.
+   **For the fallback path (optional):** Garmin Connect Mobile's app
+   settings screen — and its "My Data Fields" list — only works for apps
+   installed from the Connect IQ Store. **A sideloaded app never appears
+   there and its Application.Properties can't be set from the phone at
+   all** — that's a Garmin platform limitation, confirmed on their own
+   forums, not something to work around in this app's code. Skip this
+   unless you specifically want the 5-min self-poll fallback to have a
+   key; it needs a settings file copied to the watch by hand instead —
+   ask if you want that documented.
+5. **Add Lactate as a data field to an activity — on the watch itself,
+   not through the phone.** This is a Connect IQ Data Field, not a
+   standalone app: it doesn't show up in the Activities/Apps launcher
+   list, and being sideloaded, it also won't show up in Garmin Connect
+   Mobile's "My Data Fields"/app list (see above — that's normal, not a
+   sign it failed to install). Start or open the settings for an activity
+   like Running/Roller Skiing/XC Skiing on the watch, open the data
+   screen you want to edit, choose Add Field, and look for it under
+   **Connect IQ Fields** → **Lactate**. Repeat per activity type you want
+   it on (Running, Roller Skiing, Skiing, ...) — a data field has to be
+   added separately to each sport's screens.
 6. Start that activity. With the Android app running and the watch paired,
    the field updates as soon as the phone has a fresh Athyx reading —
    roughly every ~3 min, since that's Athyx's own rate-limit floor, not a
    Garmin restriction. If the phone app isn't running, the watch's own
    fallback poll still updates it every 5 min (Garmin's floor for a Data
    Field's background events).
+
+### "Lactate isn't in Garmin Connect Mobile's app/field list"
+
+Expected, not a bug — see step 4-5 above. That phone screen only lists
+Connect IQ Store installs; it will never show a sideloaded app no matter
+how correctly it's installed. Check the *watch itself* (step 5's on-device
+Add Field flow) instead of the phone to see whether it's really missing.
 
 ### If Lactate still doesn't show up in Connect IQ Fields after rebuilding
 
@@ -167,5 +176,6 @@ exceptions to the console, which a real watch does not.
 - `source/LactateView.mc` — the data field itself: draws the value, unit,
   zone color, and age.
 - `resources/` — strings, launcher icon, and the App Settings
-  (`settings/settings.xml` + `settings/properties.xml`) that back the
-  Garmin Connect Mobile settings screen where the Athyx key is entered.
+  (`settings/settings.xml` + `settings/properties.xml`) backing the
+  fallback Athyx key. These only work with a Connect IQ Store install —
+  see the note under "Install on your watch" for the sideload limitation.
