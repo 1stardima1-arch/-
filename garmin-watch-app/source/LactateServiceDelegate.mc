@@ -16,6 +16,21 @@ class LactateServiceDelegate extends System.ServiceDelegate {
         System.ServiceDelegate.initialize();
     }
 
+    // Fires whenever the phone pushes a message while this app is in the
+    // background — unlike onTemporalEvent, this isn't rate-limited to once
+    // per 5 minutes, since it's driven by the phone rather than a Garmin
+    // background-event schedule. The Android app already polls Athyx and
+    // relays over the Connect IQ Mobile SDK (GarminBridgePlugin.sendLactate)
+    // — this is the same push mechanism the old foreground-only code used,
+    // just handled here instead of in LactateApp where it crashed real
+    // hardware. Runs alongside onTemporalEvent as a faster path when the
+    // phone's connected; onTemporalEvent keeps working as a 5-min fallback
+    // for whenever it isn't.
+    function onPhoneAppMessage(msg as Communications.PhoneAppMessage) as Void {
+        var data = msg.data;
+        Background.exit(data instanceof Dictionary ? data : null);
+    }
+
     function onTemporalEvent() as Void {
         var apiKey = Application.Properties.getValue("athyxApiKey");
         if (!(apiKey instanceof String) || apiKey.equals("")) {

@@ -4,36 +4,42 @@ Shows the current Athyx FLUX I lactate reading (mmol/L) on a Garmin watch.
 
 ## Architecture
 
-The watch fetches from Athyx **directly** — it does not depend on the
-Android app or on Bluetooth messages from a phone app:
+Two paths feed the same field, both handled from a **background service**
+(`LactateServiceDelegate.mc`) — never from the foreground app:
 
 ```
-Athyx REST API  <--HTTPS (via phone's internet tether)--  Garmin watch
-                                                            (background
-                                                             service polls
-                                                             every 5 min,
-                                                             the fastest
-                                                             Garmin allows
-                                                             for a Data
-                                                             Field's
-                                                             background
-                                                             events)
+                    push, as soon as the phone has a fresh reading
+Athyx REST API --> Android app --> Connect IQ Mobile SDK --> onPhoneAppMessage \
+  (polled ~3 min,                                                              \
+   Athyx's own                                                                  > Garmin watch
+   rate-limit floor)                                                           /   (Lactate)
+Athyx REST API <-------------- HTTPS, via phone's internet tether ----------- /
+                    onTemporalEvent, every 5 min (Garmin's floor for a
+                    Data Field's own background events) — fallback for
+                    whenever the phone app isn't running
+
 ```
 
-This changed from an earlier design where the Android app polled Athyx and
-pushed readings to the watch over the Connect IQ Mobile SDK. That doesn't
-work for a Data Field: **Data Field apps aren't allowed to use
-`Communications` from the foreground app** — `registerForPhoneAppMessages`
-compiles fine and can even appear to work in the simulator, but crashes
-real hardware (which is why the field would show up in "Add Field" and then
-the watch would reboot and drop it). Communications — including web
-requests — is only permitted from a Data Field's **background service**,
-so that's what fetches from Athyx now (`LactateServiceDelegate.mc`).
+Both paths exist because of the same underlying restriction: **Data Field
+apps aren't allowed to use `Communications` from the foreground app** —
+`registerForPhoneAppMessages` there compiles fine and can even appear to
+work in the simulator, but crashes real hardware (which is why the field
+used to show up in "Add Field" and then the watch would reboot and drop
+it). Communications — phone push messages and web requests alike — is only
+permitted from a Data Field's background service.
 
-One consequence: the Android app is no longer required for the watch to
-work. It's still useful for pasting/checking your Athyx key and seeing the
-current reading on your phone, but the watch's own Athyx key (entered via
-Garmin Connect Mobile, see setup below) is what actually drives the field.
+The phone-push path is the fast one in practice: the Android app already
+polls Athyx (throttled to ~3 min — Athyx's own API rate limits, not
+anything Garmin-imposed) and relays over the Connect IQ Mobile SDK the
+moment it has a new reading, so **that's the realistic floor for
+"real-time" here — there's no faster source to relay from**. The watch's
+own direct polling (`onTemporalEvent`, capped at 5 min by Garmin) only
+matters when the phone app isn't installed, isn't paired, or isn't
+running — otherwise the phone push arrives first and the watch just
+displays whichever update lands most recently. The watch's own Athyx key
+(entered via Garmin Connect Mobile, see setup below) only needs to be set
+if you want that fallback to work; the Android app's key is what actually
+drives most updates.
 
 ## Why not NFC?
 
@@ -93,9 +99,13 @@ Set the Athyx key first via the simulator's App Settings (gear icon).
 1. Connect the watch via USB (mass storage mode).
 2. Copy `bin/lactate.prg` into `GARMIN/APPS/` on the watch.
 3. Safely eject.
-4. **Enter your Athyx API key in the watch's app settings** (this is what
-   the background service actually uses — the Android app's key is
-   separate, just for the phone-side display):
+4. **For the fast path:** install the Android app, connect Athyx there
+   (`ath_live_...` key), and make sure **Garmin Connect Mobile** is
+   installed and paired with the watch — that's what the Connect IQ Mobile
+   SDK actually talks to when relaying a fresh reading.
+   **For the fallback path (optional but recommended):** also enter your
+   Athyx key in the watch app's own settings, so it still gets updates
+   every 5 min even if the phone app isn't running:
    - Open **Garmin Connect Mobile** on your phone → your watch → **More** →
      **Connect IQ Store / My apps** (wording varies by app version) →
      **Lactate** → **Settings** (a gear icon) → paste your `ath_live_...`
@@ -113,10 +123,12 @@ Set the Athyx key first via the simulator's App Settings (gear icon).
    Repeat per activity type you want it on (Running, Roller Skiing,
    Skiing, ...) — a data field has to be added separately to each sport's
    screens.
-6. The field updates roughly every 5 minutes — that's Garmin's floor for
-   background events on a Data Field, not something the app can speed up.
-   Right after installing/setting the key it can take up to 5 minutes for
-   the first reading to appear.
+6. Start that activity. With the Android app running and the watch paired,
+   the field updates as soon as the phone has a fresh Athyx reading —
+   roughly every ~3 min, since that's Athyx's own rate-limit floor, not a
+   Garmin restriction. If the phone app isn't running, the watch's own
+   fallback poll still updates it every 5 min (Garmin's floor for a Data
+   Field's background events).
 
 ### If Lactate still doesn't show up in Connect IQ Fields after rebuilding
 
@@ -143,12 +155,14 @@ exceptions to the console, which a real watch does not.
   `type="datafield"` (shows up as an addable field on activity data
   screens rather than a standalone app in the Activities list).
 - `monkey.jungle` — Connect IQ project file.
-- `source/LactateApp.mc` — registers the 5-min background poll, hands
-  background data off to `LactateStore`, launches the field.
-- `source/LactateServiceDelegate.mc` — the actual Athyx polling: reads the
-  API key from this app's Garmin Connect Mobile settings, calls
-  `Communications.makeWebRequest`, parses the response, hands the reading
-  back via `Background.exit`.
+- `source/LactateApp.mc` — registers the 5-min fallback background poll,
+  hands background data off to `LactateStore`, launches the field.
+- `source/LactateServiceDelegate.mc` — the background service: relays
+  whatever the phone pushes (`onPhoneAppMessage`, the fast path) and, as a
+  fallback, polls Athyx directly every 5 min (`onTemporalEvent`, reading
+  the API key from this app's Garmin Connect Mobile settings and calling
+  `Communications.makeWebRequest`). Either path hands the reading back via
+  `Background.exit`.
 - `source/LactateStore.mc` — holds the last reading (singleton module).
 - `source/LactateView.mc` — the data field itself: draws the value, unit,
   zone color, and age.
