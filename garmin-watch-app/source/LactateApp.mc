@@ -30,7 +30,10 @@ class LactateApp extends Application.AppBase {
     // off a fresh reading via Background.exit(). Background and foreground
     // run in separate memory spaces, so this callback — not a shared
     // module variable — is how the reading crosses over.
-    function onBackgroundData(data as Dictionary or Null) as Void {
+    // No explicit parameter type here — the base class declares a wider
+    // union (Application.PropertyValueType) than "Dictionary or Null" and
+    // the compiler rejects a narrower override, so let it infer instead.
+    function onBackgroundData(data) as Void {
         if (data instanceof Dictionary) {
             LactateStore.update(data as Dictionary);
         }

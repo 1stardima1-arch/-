@@ -39,7 +39,11 @@ class LactateServiceDelegate extends System.ServiceDelegate {
         );
     }
 
-    function onReceive(responseCode as Number, data as Dictionary or Array or Null) as Void {
+    // No explicit type for `data` — makeWebRequest's callback signature is
+    // a specific union (Dictionary/String/PersistedContent.Iterator, no
+    // Array) that doesn't match "Dictionary or Array or Null" exactly, so
+    // let the compiler infer it from Communications' declared callback type.
+    function onReceive(responseCode as Number, data) as Void {
         if (responseCode != 200 || data == null) {
             Background.exit(null);
             return;
