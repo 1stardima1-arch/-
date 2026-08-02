@@ -1,4 +1,5 @@
 <strings>
     <string id="AppName">Lactate</string>
-    <string id="Waiting">Ожидание данных с телефона...</string>
+    <string id="Waiting">Ожидание данных Athyx...</string>
+    <string id="AthyxApiKeyTitle">Athyx API key</string>
 </strings>

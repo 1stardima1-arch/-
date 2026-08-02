@@ -1,0 +1,3 @@
+<properties>
+    <property id="athyxApiKey" type="string"></property>
+</properties>

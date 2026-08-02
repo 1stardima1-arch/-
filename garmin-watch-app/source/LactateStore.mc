@@ -2,9 +2,10 @@ import Toybox.Lang;
 import Toybox.System;
 import Toybox.WatchUi;
 
-// Holds the last lactate reading pushed from the phone. A module acts as a
-// singleton in Monkey C, so both the Application and the View read/write
-// the same state without passing it around explicitly.
+// Holds the last lactate reading fetched from Athyx by
+// LactateServiceDelegate and handed off via LactateApp.onBackgroundData. A
+// module acts as a singleton in Monkey C, so both the Application and the
+// View read/write the same state without passing it around explicitly.
 module LactateStore {
     var hasData as Boolean = false;
     var lactateMM as Float = 0.0f;
@@ -13,9 +14,8 @@ module LactateStore {
     var receivedAtMs as Number = 0;
 
     function update(data as Dictionary) as Void {
-        // Values arrive from the phone as Object — Communications doesn't
-        // preserve exact numeric type, so narrow with `as` before calling
-        // any numeric conversion method.
+        // Values arrive as Object regardless of source — narrow with `as`
+        // before calling any numeric conversion method.
         if (data.hasKey("lactate")) {
             var raw = data.get("lactate") as Number or Float or Long or Double or Null;
             if (raw != null) {
@@ -38,8 +38,7 @@ module LactateStore {
     }
 
     // Age in seconds, accounting for time elapsed on the watch since the
-    // message arrived (the phone's reported age is already stale by the
-    // time Bluetooth delivery + this tick complete).
+    // reading arrived.
     function currentAgeSec() as Number {
         if (!hasData) {
             return -1;

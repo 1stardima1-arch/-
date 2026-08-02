@@ -9,9 +9,10 @@ import Toybox.Time;
 // being launched on its own from the Activities/Apps list.
 class LactateView extends WatchUi.DataField {
     // Anything past this age is shown as stale rather than acted on as
-    // fresh — the Athyx API is polled every ~30s, so this gives a couple
-    // of missed cycles of slack before flagging it.
-    const STALE_AFTER_SEC = 120;
+    // fresh. Garmin's background-event floor means Lactate itself only
+    // polls Athyx every 5 min, so this leaves a little slack past that
+    // before flagging it grey.
+    const STALE_AFTER_SEC = 360;
 
     function initialize() {
         DataField.initialize();

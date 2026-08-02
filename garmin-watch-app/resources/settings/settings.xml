@@ -1,0 +1,5 @@
+<settings>
+    <setting propertyKey="@Properties.athyxApiKey" title="@Strings.AthyxApiKeyTitle">
+        <settingConfig type="alphaNumeric"/>
+    </setting>
+</settings>

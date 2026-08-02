@@ -302,6 +302,9 @@ export function AthyxConnectCard() {
               >
                 athyx.com/developers
               </a>
+              . Для часов этот же ключ нужно ещё раз вставить в Garmin Connect
+              Mobile → устройство → Мои приложения IQ → Lactate → Настройки —
+              часы опрашивают Athyx сами, напрямую, не через это приложение.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-2">

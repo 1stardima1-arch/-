@@ -1,7 +1,8 @@
 import Toybox.Application;
+import Toybox.Background;
 import Toybox.Lang;
 import Toybox.WatchUi;
-import Toybox.Communications;
+import Toybox.Time;
 
 class LactateApp extends Application.AppBase {
 
@@ -9,19 +10,26 @@ class LactateApp extends Application.AppBase {
         AppBase.initialize();
     }
 
+    // Garmin enforces a 5-minute floor on background events for Data Field
+    // apps, so that's the fastest Lactate can ever refresh — see
+    // LactateServiceDelegate for the actual Athyx polling.
     function onStart(state as Dictionary?) as Void {
-        Communications.registerForPhoneAppMessages(method(:onPhoneMessage));
+        Background.registerForTemporalEvent(new Time.Duration(300));
     }
 
-    function onStop(state as Dictionary?) as Void {
-        Communications.registerForPhoneAppMessages(null);
+    // Data Field apps can't touch Communications from the foreground — it
+    // compiles and can even appear to work in the simulator, but crashes
+    // real hardware. All Athyx polling has to happen in a background
+    // service instead.
+    function getServiceDelegate() as [System.ServiceDelegate] {
+        return [ new LactateServiceDelegate() ];
     }
 
-    // Called with a Communications.PhoneAppMessage whose .data is whatever
-    // the phone sent — a Dictionary with lactate/zone/age/ts keys, see
-    // GarminBridgePlugin.sendLactate on the Android side.
-    function onPhoneMessage(msg as Communications.PhoneAppMessage) as Void {
-        var data = msg.data;
+    // Called on the foreground process when the background service hands
+    // off a fresh reading via Background.exit(). Background and foreground
+    // run in separate memory spaces, so this callback — not a shared
+    // module variable — is how the reading crosses over.
+    function onBackgroundData(data as Dictionary or Null) as Void {
         if (data instanceof Dictionary) {
             LactateStore.update(data as Dictionary);
         }
