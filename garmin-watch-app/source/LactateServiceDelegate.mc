@@ -2,6 +2,7 @@ import Toybox.Background;
 import Toybox.Communications;
 import Toybox.Application;
 import Toybox.Lang;
+import Toybox.PersistedContent;
 import Toybox.System;
 
 // Runs in the background so it can poll Athyx on its own schedule —
@@ -39,11 +40,10 @@ class LactateServiceDelegate extends System.ServiceDelegate {
         );
     }
 
-    // No explicit type for `data` — makeWebRequest's callback signature is
-    // a specific union (Dictionary/String/PersistedContent.Iterator, no
-    // Array) that doesn't match "Dictionary or Array or Null" exactly, so
-    // let the compiler infer it from Communications' declared callback type.
-    function onReceive(responseCode as Number, data) as Void {
+    // Must match Communications.makeWebRequest's declared callback type
+    // exactly (no Array in the union — omitting the annotation defaults to
+    // Any, which the compiler also rejects here).
+    function onReceive(responseCode as Number, data as Dictionary or String or PersistedContent.Iterator or Null) as Void {
         if (responseCode != 200 || data == null) {
             Background.exit(null);
             return;
