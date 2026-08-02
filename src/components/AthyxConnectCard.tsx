@@ -26,7 +26,9 @@ import { GarminBridge } from "@/lib/garmin-bridge";
 import { lactateZone } from "@/hooks/use-garmin-lactate-bridge";
 
 const STORAGE_KEY = "athyx_api_key";
-const POLL_INTERVAL_MS = 60_000;
+// Athyx's limit is tight enough that even a 60s poll draws 429s — back this
+// off further so routine polling stays well clear of the limit.
+const POLL_INTERVAL_MS = 180_000;
 // Athyx returned 429 (rate limited) and gave no Retry-After — back off with
 // growing delays instead of retrying at a fixed interval that just draws
 // another 429 every time.
@@ -146,8 +148,17 @@ export function AthyxConnectCard() {
       const res = await GarminBridge.fetchAthyxLatest({ apiKey: key });
       if (!res.success) {
         if (res.error === "http_429") {
+          // A 429 only proves the account is rate-limited, not that the key
+          // is wrong — save it anyway so the poll loop can pick up the first
+          // reading once the limit clears, instead of forcing a re-paste.
           const backoffMs = res.retryAfterSec !== undefined ? res.retryAfterSec * 1000 : RATE_LIMIT_BASE_BACKOFF_MS;
           backoffUntilRef.current = Date.now() + backoffMs;
+          localStorage.setItem(STORAGE_KEY, key);
+          setApiKey(key);
+          toast.info("Athyx ограничивает частоту запросов — ключ сохранён, данные подтянутся автоматически");
+          setModalOpen(false);
+          setInputValue("");
+          return;
         }
         toast.error(errorMessage(res.error));
         return;
